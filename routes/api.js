@@ -1,6 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const { detectVPN, getVPNExplanation } = require('./vpn-detection');
+const { 
+    generateSessionFingerprint,
+    fingerprintToText,
+    generateEmbedding,
+    initializeQdrantCollection,
+    storeSessionFingerprint,
+    findSimilarSessions,
+    evaluateSimilarity
+} = require('./session-fingerprint');
+
+// Initialize Qdrant collection on startup
+initializeQdrantCollection().catch(console.error);
 
 // Middleware to log API requests
 router.use((req, res, next) => {
@@ -173,6 +185,143 @@ router.get('/vpn/check/:ip?', async (req, res) => {
     } catch (error) {
         console.error('VPN check error:', error);
         res.status(500).json({ error: 'Failed to check VPN status' });
+    }
+});
+
+// ==================== Session Fingerprinting API ====================
+
+// Store detection session for pattern analysis
+router.post('/session/store', async (req, res) => {
+    try {
+        const detectionData = {
+            location: req.body.location,
+            environment: req.body.environment,
+            network: req.body.network,
+            timestamp: req.body.timestamp,
+            userAgent: req.headers['user-agent'],
+            clientIp: getClientIp(req),
+            detectionResults: req.body.detectionResults
+        };
+        
+        // Generate fingerprint
+        const fingerprint = generateSessionFingerprint(detectionData);
+        
+        // Convert to text for embedding
+        const fingerprintText = fingerprintToText(fingerprint);
+        
+        // Generate embedding
+        const embedding = await generateEmbedding(fingerprintText);
+        
+        // Store in Qdrant
+        const sessionId = await storeSessionFingerprint(fingerprint, embedding);
+        
+        res.json({
+            success: true,
+            sessionId: sessionId,
+            fingerprint: fingerprint
+        });
+    } catch (error) {
+        console.error('Session store error:', error);
+        res.status(500).json({ error: 'Failed to store session fingerprint' });
+    }
+});
+
+// Find similar sessions
+router.post('/session/similar', async (req, res) => {
+    try {
+        const { sessionData, limit = 5 } = req.body;
+        
+        let embedding;
+        
+        if (sessionData) {
+            // Generate fingerprint from provided data
+            const detectionData = {
+                location: sessionData.location,
+                environment: sessionData.environment,
+                network: sessionData.network,
+                timestamp: sessionData.timestamp,
+                userAgent: req.headers['user-agent'],
+                clientIp: getClientIp(req),
+                detectionResults: sessionData.detectionResults
+            };
+            
+            const fingerprint = generateSessionFingerprint(detectionData);
+            const fingerprintText = fingerprintToText(fingerprint);
+            embedding = await generateEmbedding(fingerprintText);
+        } else {
+            return res.status(400).json({ error: 'Session data required' });
+        }
+        
+        // Find similar sessions
+        const similarSessions = await findSimilarSessions(embedding, limit);
+        
+        res.json({
+            success: true,
+            similarSessions: similarSessions
+        });
+    } catch (error) {
+        console.error('Similar sessions error:', error);
+        res.status(500).json({ error: 'Failed to find similar sessions' });
+    }
+});
+
+// Evaluate session with LLM
+router.post('/session/evaluate', async (req, res) => {
+    try {
+        const { currentSession, similarSessions } = req.body;
+        
+        if (!currentSession) {
+            return res.status(400).json({ error: 'Current session data required' });
+        }
+        
+        let sessions = similarSessions;
+        
+        // If no similar sessions provided, find them
+        if (!sessions) {
+            const detectionData = {
+                location: currentSession.location,
+                environment: currentSession.environment,
+                network: currentSession.network,
+                timestamp: currentSession.timestamp,
+                userAgent: req.headers['user-agent'],
+                clientIp: getClientIp(req),
+                detectionResults: currentSession.detectionResults
+            };
+            
+            const fingerprint = generateSessionFingerprint(detectionData);
+            const fingerprintText = fingerprintToText(fingerprint);
+            const embedding = await generateEmbedding(fingerprintText);
+            sessions = await findSimilarSessions(embedding, 5);
+        }
+        
+        // Evaluate with LLM
+        const evaluation = await evaluateSimilarity(currentSession, sessions);
+        
+        res.json({
+            success: true,
+            evaluation: evaluation,
+            similarSessionsCount: sessions.length
+        });
+    } catch (error) {
+        console.error('Evaluation error:', error);
+        res.status(500).json({ error: 'Failed to evaluate session' });
+    }
+});
+
+// Get session analysis summary
+router.get('/session/analysis/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        
+        // This would retrieve the session from Qdrant by ID
+        // For now, return a placeholder
+        res.json({
+            success: true,
+            message: 'Session analysis endpoint - implement Qdrant retrieval by ID'
+        });
+    } catch (error) {
+        console.error('Analysis error:', error);
+        res.status(500).json({ error: 'Failed to get session analysis' });
     }
 });
 

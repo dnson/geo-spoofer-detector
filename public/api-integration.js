@@ -497,6 +497,237 @@ function generateSessionId() {
 }
 
 /**
+ * Store session fingerprint for pattern analysis
+ */
+async function storeSessionFingerprint() {
+    try {
+        // Show storing notification
+        showNotification('Storing session fingerprint...', 'info');
+        
+        // Collect all detection data
+        const sessionData = {
+            location: window.detectionState.location,
+            environment: {
+                screenResolution: {
+                    width: window.screen.width,
+                    height: window.screen.height
+                },
+                colorDepth: window.screen.colorDepth,
+                touchSupport: 'ontouchstart' in window,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                language: navigator.language,
+                platform: navigator.platform,
+                webglRenderer: getWebGLRenderer(),
+                flags: window.detectionState.environmentFlags
+            },
+            network: {
+                webrtcIps: collectWebRTCIPs(),
+                navigatorProperties: detectNavigatorProperties()
+            },
+            timestamp: new Date().toISOString(),
+            detectionResults: {
+                locationScore: window.detectionState.verificationScore || calculateLocationScore(),
+                environmentScore: window.detectionState.environmentScore || calculateEnvironmentScore(),
+                locationFlags: window.detectionState.locationFlags,
+                environmentFlags: window.detectionState.environmentFlags
+            }
+        };
+        
+        const response = await fetch(`${API_BASE_URL}/session/store`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(sessionData)
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('Session fingerprint stored:', result.sessionId);
+            
+            // Store session ID for future reference
+            window.lastSessionId = result.sessionId;
+            
+            // Show success notification
+            showNotification(`Session stored! ID: ${result.sessionId.substring(0, 8)}...`, 'success');
+            
+            // Show pattern analysis card
+            window.showPatternAnalysisCard();
+            
+            // Optionally show pattern analysis
+            if (window.showPatternAnalysis) {
+                await findSimilarSessions(sessionData);
+            }
+        } else {
+            throw new Error(`Server returned ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Failed to store session fingerprint:', error);
+        
+        // Show error notification with helpful message
+        if (error.message.includes('Failed to fetch')) {
+            showNotification('Session storage skipped - Gemini/Qdrant not configured', 'warning');
+        } else {
+            showNotification('Failed to store session: ' + error.message, 'error');
+        }
+    }
+}
+
+/**
+ * Show notification to user
+ */
+function showNotification(message, type = 'info') {
+    // Create notification element if it doesn't exist
+    let notification = document.getElementById('notification');
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 10000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            max-width: 300px;
+        `;
+        document.body.appendChild(notification);
+    }
+    
+    // Set color based on type
+    const colors = {
+        info: '#3b82f6',
+        success: '#10b981',
+        warning: '#f59e0b',
+        error: '#ef4444'
+    };
+    
+    notification.style.backgroundColor = colors[type] || colors.info;
+    notification.textContent = message;
+    
+    // Show notification
+    setTimeout(() => {
+        notification.style.transform = 'translateX(0)';
+    }, 10);
+    
+    // Hide after 4 seconds
+    setTimeout(() => {
+        notification.style.transform = 'translateX(400px)';
+    }, 4000);
+}
+
+/**
+ * Find similar sessions and show analysis
+ */
+async function findSimilarSessions(sessionData) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/session/similar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ sessionData, limit: 5 })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('Similar sessions found:', result.similarSessions);
+            
+            // Get LLM evaluation
+            const evalResponse = await fetch(`${API_BASE_URL}/session/evaluate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    currentSession: sessionData,
+                    similarSessions: result.similarSessions
+                })
+            });
+            
+            if (evalResponse.ok) {
+                const evaluation = await evalResponse.json();
+                displayPatternAnalysis(evaluation.evaluation, result.similarSessions);
+            }
+        }
+    } catch (error) {
+        console.error('Failed to find similar sessions:', error);
+    }
+}
+
+/**
+ * Helper functions for collecting additional data
+ */
+function getWebGLRenderer() {
+    try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (gl) {
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+                return gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+            }
+        }
+    } catch (e) {}
+    return 'Unknown';
+}
+
+function collectWebRTCIPs() {
+    // This would collect WebRTC IPs if available
+    // Placeholder for now
+    return [];
+}
+
+function detectNavigatorProperties() {
+    const props = [];
+    const suspiciousProperties = ['brave', 'globalPrivacyControl'];
+    suspiciousProperties.forEach(prop => {
+        if (prop in navigator) {
+            props.push(prop);
+        }
+    });
+    return props;
+}
+
+function calculateLocationScore() {
+    let score = 100;
+    window.detectionState.locationFlags.forEach(flag => {
+        if (flag.type === 'warning') score -= 20;
+        if (flag.type === 'fail') score -= 40;
+    });
+    return Math.max(0, score);
+}
+
+function calculateEnvironmentScore() {
+    let score = 100;
+    window.detectionState.environmentFlags.forEach(flag => {
+        if (flag.type === 'warning') score -= 25;
+        if (flag.type === 'fail') score -= 50;
+    });
+    return Math.max(0, score);
+}
+
+/**
+ * Display pattern analysis in UI
+ */
+function displayPatternAnalysis(evaluation, similarSessions) {
+    // This would update the UI to show pattern analysis
+    // For now, log to console
+    console.log('Pattern Analysis:', evaluation);
+    console.log('Similar Sessions:', similarSessions);
+    
+    // You could create a new UI card or modal to display this information
+    // For example:
+    if (window.showPatternAnalysisUI) {
+        window.showPatternAnalysisUI(evaluation, similarSessions);
+    }
+}
+
+/**
  * Override the original detection functions if API is enabled
  */
 if (USE_API) {
@@ -608,6 +839,9 @@ function setupAPIIntegration() {
             
             console.log('Final detectionState after analysis:', window.detectionState);
             storeDetectionResultsAPI();
+            
+            // Store session fingerprint for pattern analysis
+            storeSessionFingerprint();
         };
     }
 } 

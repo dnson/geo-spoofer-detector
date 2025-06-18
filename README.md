@@ -11,12 +11,15 @@ A sophisticated Location Authenticity & Environment Detector that helps identify
 - **Real-time Analysis**: Instant detection with visual feedback
 - **RESTful API**: Backend API for location verification and environment analysis
 - **Free VPN Detection**: Works out-of-the-box without API keys (with option to add services for better accuracy)
+- **Pattern Analysis**: AI-powered session fingerprinting with Gemini embeddings and Qdrant vector search
 
 ## Tech Stack
 
 - **Backend**: Node.js, Express.js
 - **Frontend**: Vanilla JavaScript, HTML5, CSS3
 - **Security**: Helmet.js, CORS, Rate Limiting
+- **AI/ML**: Google Gemini for embeddings and LLM evaluation
+- **Vector Database**: Qdrant for similarity search
 - **Deployment**: Docker-ready (optional)
 
 ## Installation
@@ -194,6 +197,78 @@ Content-Type: application/json
 GET /health
 ```
 
+### Pattern Analysis
+
+#### Store Session Fingerprint
+```http
+POST /api/session/store
+Content-Type: application/json
+
+{
+  "location": {...},
+  "environment": {...},
+  "network": {...},
+  "detectionResults": {...}
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "sessionId": "abc123...",
+  "fingerprint": {...}
+}
+```
+
+#### Find Similar Sessions
+```http
+POST /api/session/similar
+Content-Type: application/json
+
+{
+  "sessionData": {...},
+  "limit": 5
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "similarSessions": [
+    {
+      "score": 0.95,
+      "payload": {...}
+    }
+  ]
+}
+```
+
+#### AI Evaluation
+```http
+POST /api/session/evaluate
+Content-Type: application/json
+
+{
+  "currentSession": {...},
+  "similarSessions": [...]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "evaluation": {
+    "riskAssessment": "High",
+    "explanation": "...",
+    "patterns": [...],
+    "recommendations": [...]
+  }
+}
+```
+
 ## Detection Methods
 
 ### Location Spoofing Detection
@@ -218,6 +293,13 @@ GET /health
 - Touch support anomalies
 - Timing irregularities
 - Virtual display adapter detection
+
+### Pattern Analysis with AI
+- Session fingerprinting with comprehensive characteristics
+- Vector embeddings using Google Gemini
+- Similarity search with Qdrant vector database
+- AI-powered risk assessment and recommendations
+- Pattern identification across multiple sessions
 
 ## Security Considerations
 
