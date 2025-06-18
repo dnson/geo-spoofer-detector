@@ -120,19 +120,32 @@ class GeoSpoofAPI {
 // Initialize API client
 const geoSpoofAPI = new GeoSpoofAPI();
 
+// Reference to updateCheck function from main script
+// const updateCheck = window.updateCheck || function() { console.warn('updateCheck not available'); };
+
 /**
  * Enhanced location detection with API integration
  */
 async function detectLocationWithAPI() {
     console.log('detectLocationWithAPI called');
     
+    window.updateCheck('location', 'geo-api', 'running');
     if (!navigator.geolocation) {
         window.detectionState.locationFlags.push({
             type: 'fail',
-            message: 'Geolocation API not available'
+            message: 'Geolocation API not available',
+            explanation: 'Your browser does not support the Geolocation API. This may be an older browser or one with location services disabled at the system level.'
         });
+        window.updateCheck('location', 'geo-api', 'fail', 'Not available');
+        window.updateCheck('location', 'response-time', 'fail', 'N/A');
+        window.updateCheck('location', 'accuracy', 'fail', 'N/A');
+        window.updateCheck('location', 'null-island', 'fail', 'N/A');
+        window.updateCheck('location', 'round-coords', 'fail', 'N/A');
+        window.updateCheck('location', 'vpn-detection', 'fail', 'N/A');
         return;
     }
+    
+    window.updateCheck('location', 'geo-api', 'pass', 'Available');
 
     return new Promise((resolve) => {
         const startTime = performance.now();
@@ -155,11 +168,58 @@ async function detectLocationWithAPI() {
                 console.log('Location stored in detectionState:', window.detectionState.location);
                 
                 // Check for suspiciously fast response (client-side check)
+                window.updateCheck('location', 'response-time', 'running');
                 if (duration < 10) {
                     window.detectionState.locationFlags.push({
                         type: 'warning',
-                        message: 'Location obtained suspiciously fast'
+                        message: 'Location obtained suspiciously fast',
+                        explanation: `Response time: ${duration.toFixed(1)}ms. Real GPS typically takes 100-1000ms. Very fast responses may indicate a location spoofing extension providing cached/fake coordinates.`
                     });
+                    window.updateCheck('location', 'response-time', 'warning', `${duration.toFixed(0)}ms`);
+                } else {
+                    window.updateCheck('location', 'response-time', 'pass', `${duration.toFixed(0)}ms`);
+                }
+                
+                // Check accuracy
+                window.updateCheck('location', 'accuracy', 'running');
+                if (position.coords.accuracy > 1000) {
+                    window.detectionState.locationFlags.push({
+                        type: 'warning',
+                        message: 'Low location accuracy',
+                        explanation: `Accuracy: ±${Math.round(position.coords.accuracy)}m. GPS typically provides 5-10m accuracy. High values suggest IP-based geolocation or poor GPS signal.`
+                    });
+                    window.updateCheck('location', 'accuracy', 'warning', `±${Math.round(position.coords.accuracy)}m`);
+                } else {
+                    window.updateCheck('location', 'accuracy', 'pass', `±${Math.round(position.coords.accuracy)}m`);
+                }
+                
+                // Check for common spoofing coordinates
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                
+                window.updateCheck('location', 'null-island', 'running');
+                if (lat === 0 && lon === 0) {
+                    window.detectionState.locationFlags.push({
+                        type: 'fail',
+                        message: 'Null Island coordinates detected',
+                        explanation: 'Coordinates (0°, 0°) point to "Null Island" in the Atlantic Ocean. This is a common default value used by spoofing tools.'
+                    });
+                    window.updateCheck('location', 'null-island', 'fail', 'Detected');
+                } else {
+                    window.updateCheck('location', 'null-island', 'pass', 'Valid coords');
+                }
+                
+                // Check for overly round numbers
+                window.updateCheck('location', 'round-coords', 'running');
+                if (lat % 1 === 0 && lon % 1 === 0) {
+                    window.detectionState.locationFlags.push({
+                        type: 'warning',
+                        message: 'Suspiciously round coordinates',
+                        explanation: `Coordinates are exact integers (${lat}°, ${lon}°). Real GPS coordinates typically have decimal precision. Round numbers suggest manual input or basic spoofing.`
+                    });
+                    window.updateCheck('location', 'round-coords', 'warning', 'Too round');
+                } else {
+                    window.updateCheck('location', 'round-coords', 'pass', 'Normal precision');
                 }
 
                 // Verify with API
@@ -196,22 +256,67 @@ async function detectLocationWithAPI() {
                     if (metadata) {
                         window.detectionState.location.metadata = metadata;
                     }
+                    
+                    // Perform VPN detection
+                    window.updateCheck('location', 'vpn-detection', 'running');
+                    try {
+                        const vpnResponse = await fetch('/api/vpn/check');
+                        const vpnData = await vpnResponse.json();
+                        
+                        if (vpnData.isVPN) {
+                            window.detectionState.locationFlags.push({
+                                type: 'warning',
+                                message: 'VPN/Proxy detected',
+                                explanation: vpnData.explanation
+                            });
+                            window.updateCheck('location', 'vpn-detection', 'warning', `${vpnData.confidence}% confidence`);
+                        } else {
+                            window.updateCheck('location', 'vpn-detection', 'pass', 'No VPN');
+                        }
+                    } catch (e) {
+                        console.error('VPN check error:', e);
+                        window.updateCheck('location', 'vpn-detection', 'pass', 'Unable to check');
+                    }
                 } else {
                     // API call failed, add a flag
                     window.detectionState.locationFlags.push({
                         type: 'warning',
                         message: 'Could not verify location with server'
                     });
+                    window.updateCheck('location', 'vpn-detection', 'pass', 'API error');
                 }
 
                 resolve();
             },
             (error) => {
                 console.error('Geolocation error:', error);
+                
+                let explanation = '';
+                switch(error.code) {
+                    case 1: // PERMISSION_DENIED
+                        explanation = 'Location access was denied. Check your browser settings to allow location access for this site.';
+                        break;
+                    case 2: // POSITION_UNAVAILABLE
+                        explanation = 'Unable to determine location. This can happen when GPS/WiFi positioning is unavailable or disabled.';
+                        break;
+                    case 3: // TIMEOUT
+                        explanation = 'Location request timed out. This might indicate poor GPS signal or network issues.';
+                        break;
+                    default:
+                        explanation = 'An unknown error occurred while trying to get your location.';
+                }
+                
                 window.detectionState.locationFlags.push({
                     type: 'fail',
-                    message: `Location error: ${error.message}`
+                    message: `Location error: ${error.message}`,
+                    explanation: explanation
                 });
+                
+                window.updateCheck('location', 'response-time', 'fail', 'Error');
+                window.updateCheck('location', 'accuracy', 'fail', 'Error');
+                window.updateCheck('location', 'null-island', 'fail', 'Error');
+                window.updateCheck('location', 'round-coords', 'fail', 'Error');
+                window.updateCheck('location', 'vpn-detection', 'fail', 'Error');
                 
                 // Still call the API even on error
                 geoSpoofAPI.verifyLocation({
@@ -220,7 +325,7 @@ async function detectLocationWithAPI() {
                     accuracy: null,
                     timestamp: Date.now(),
                     error: error.message
-                }).then(verificationResult => {
+                }).then(async verificationResult => {
                     console.log('API response for location error:', verificationResult);
                     if (verificationResult) {
                         // Store the verification status
@@ -234,6 +339,27 @@ async function detectLocationWithAPI() {
                                 ...verificationResult.flags
                             ];
                         }
+                    }
+                    
+                    // Still perform VPN check even on error
+                    window.updateCheck('location', 'vpn-detection', 'running');
+                    try {
+                        const vpnResponse = await fetch('/api/vpn/check');
+                        const vpnData = await vpnResponse.json();
+                        
+                        if (vpnData.isVPN) {
+                            window.detectionState.locationFlags.push({
+                                type: 'warning',
+                                message: 'VPN/Proxy detected',
+                                explanation: vpnData.explanation
+                            });
+                            window.updateCheck('location', 'vpn-detection', 'warning', `${vpnData.confidence}% confidence`);
+                        } else {
+                            window.updateCheck('location', 'vpn-detection', 'pass', 'No VPN');
+                        }
+                    } catch (e) {
+                        console.error('VPN check error:', e);
+                        window.updateCheck('location', 'vpn-detection', 'pass', 'Unable to check');
                     }
                 });
                 
@@ -256,12 +382,33 @@ async function detectLocationWithAPI() {
                     longitude: null,
                     accuracy: null,
                     timestamp: Date.now()
-                }).then(verificationResult => {
+                }).then(async verificationResult => {
                     if (verificationResult) {
                         window.detectionState.locationFlags = [
                             { type: 'fail', message: 'Location not available' },
                             ...(verificationResult.flags || [])
                         ];
+                    }
+                    
+                    // Still perform VPN check even without location
+                    window.updateCheck('location', 'vpn-detection', 'running');
+                    try {
+                        const vpnResponse = await fetch('/api/vpn/check');
+                        const vpnData = await vpnResponse.json();
+                        
+                        if (vpnData.isVPN) {
+                            window.detectionState.locationFlags.push({
+                                type: 'warning',
+                                message: 'VPN/Proxy detected',
+                                explanation: vpnData.explanation
+                            });
+                            window.updateCheck('location', 'vpn-detection', 'warning', `${vpnData.confidence}% confidence`);
+                        } else {
+                            window.updateCheck('location', 'vpn-detection', 'pass', 'No VPN');
+                        }
+                    } catch (e) {
+                        console.error('VPN check error:', e);
+                        window.updateCheck('location', 'vpn-detection', 'pass', 'Unable to check');
                     }
                 });
                 resolve();

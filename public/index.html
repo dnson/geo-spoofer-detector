@@ -15,21 +15,22 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            padding: 40px 20px;
             color: #fff;
             position: relative;
-            overflow: hidden;
+            overflow-y: auto;
+            overflow-x: hidden;
         }
 
         /* Animated background particles */
         .particles {
-            position: absolute;
+            position: fixed;
             width: 100%;
             height: 100%;
             overflow: hidden;
             pointer-events: none;
+            top: 0;
+            left: 0;
         }
 
         .particle {
@@ -57,8 +58,9 @@
             padding: 40px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            max-width: 600px;
+            max-width: 1200px;
             width: 90%;
+            margin: 0 auto;
             z-index: 10;
             position: relative;
         }
@@ -128,6 +130,48 @@
             animation: fadeIn 0.5s ease;
         }
 
+        /* Two-column grid for result cards */
+        .results-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+            align-items: start;
+        }
+        
+        /* Constrain height for cards in grid */
+        .results-grid .result-card {
+            height: fit-content;
+            max-height: 600px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Equal height for first row cards */
+        .results-grid .result-card:nth-child(1),
+        .results-grid .result-card:nth-child(2) {
+            min-height: 350px;
+        }
+        
+        .results-grid .detection-details {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 500px;
+        }
+        
+        /* Adjust check category content height for the grid layout */
+        .results-grid .check-category-content {
+            min-height: 100px;
+            max-height: 150px;
+        }
+        
+        /* Responsive: Stack on smaller screens */
+        @media (max-width: 1200px) {
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         @keyframes fadeIn {
             from {
                 opacity: 0;
@@ -147,6 +191,149 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             position: relative;
             overflow: hidden;
+        }
+
+        /* Add scrolling to the all checks card */
+        #allChecksDetails {
+            max-height: none;
+            overflow-y: visible;
+            overflow-x: hidden;
+            padding-right: 0;
+        }
+
+        /* Grid layout for check categories */
+        .checks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 15px;
+        }
+        
+        /* Make categories look better in grid */
+        .checks-grid .check-category {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .checks-grid .check-category:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Adjust header in grid layout */
+        .checks-grid .check-category h4 {
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Make content scrollable within each category */
+        .checks-grid .check-category-content {
+            flex: 1;
+            min-height: 150px;
+            max-height: 250px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 5px;
+        }
+        
+        /* Responsive grid for different screen sizes */
+        @media (min-width: 1200px) {
+            .checks-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .checks-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            /* Full width check categories on mobile */
+            .result-card[style*="grid-column"] .checks-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Remove max-height from individual check details when in grid */
+        .checks-grid #allChecksDetails {
+            max-height: none;
+            overflow: visible;
+            padding-right: 0;
+        }
+
+        /* Add scrolling to location and environment details */
+        #locationDetails,
+        #environmentDetails {
+            max-height: 400px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 10px;
+        }
+
+        /* Special handling for allChecksDetails in grid */
+        .results-grid #allChecksDetails {
+            overflow: visible;
+            max-height: none;
+        }
+
+        /* Adjust the All Detection Checks card when it's full width */
+        .result-card[style*="grid-column"] #allChecksDetails {
+            max-height: 500px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        
+        /* Ensure check categories work well in the full-width card */
+        .result-card[style*="grid-column"] .checks-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+        
+        /* Adjust check category content heights for bottom placement */
+        .result-card[style*="grid-column"] .check-category-content {
+            min-height: 150px;
+            max-height: 250px;
+        }
+
+        /* Custom scrollbar styling */
+        #allChecksDetails::-webkit-scrollbar,
+        #locationDetails::-webkit-scrollbar,
+        #environmentDetails::-webkit-scrollbar,
+        .check-category-content::-webkit-scrollbar,
+        .result-card[style*="grid-column"] #allChecksDetails::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #allChecksDetails::-webkit-scrollbar-track,
+        #locationDetails::-webkit-scrollbar-track,
+        #environmentDetails::-webkit-scrollbar-track,
+        .check-category-content::-webkit-scrollbar-track,
+        .result-card[style*="grid-column"] #allChecksDetails::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        #allChecksDetails::-webkit-scrollbar-thumb,
+        #locationDetails::-webkit-scrollbar-thumb,
+        #environmentDetails::-webkit-scrollbar-thumb,
+        .check-category-content::-webkit-scrollbar-thumb,
+        .result-card[style*="grid-column"] #allChecksDetails::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        #allChecksDetails::-webkit-scrollbar-thumb:hover,
+        #locationDetails::-webkit-scrollbar-thumb:hover,
+        #environmentDetails::-webkit-scrollbar-thumb:hover,
+        .check-category-content::-webkit-scrollbar-thumb:hover,
+        .result-card[style*="grid-column"] #allChecksDetails::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
         }
 
         .result-card::before {
@@ -287,13 +474,186 @@
             margin-top: 10px;
         }
 
+        .check-category {
+            margin-bottom: 0;
+        }
+
+        .check-category h4 {
+            margin-bottom: 12px;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            user-select: none;
+            transition: all 0.3s ease;
+        }
+
+        .check-category h4:hover {
+            color: rgba(255, 255, 255, 1);
+        }
+
+        .check-category h4::before {
+            content: '▼';
+            font-size: 0.8em;
+            transition: transform 0.3s ease;
+            display: inline-block;
+        }
+
+        .check-category.collapsed h4::before {
+            transform: rotate(-90deg);
+        }
+
+        .category-summary {
+            margin-left: auto;
+            font-size: 0.85em;
+            opacity: 0.7;
+            display: none;
+        }
+
+        .check-category.collapsed .category-summary {
+            display: inline-flex;
+            gap: 8px;
+        }
+
+        .category-count {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+        }
+
+        .check-category-content {
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+            max-height: 500px;
+            opacity: 1;
+        }
+
+        .check-category.collapsed .check-category-content {
+            max-height: 0;
+            opacity: 0;
+        }
+        
+        /* In grid layout, ensure collapsed categories maintain their space */
+        .checks-grid .check-category.collapsed {
+            min-height: auto;
+        }
+        
+        .checks-grid .check-category.collapsed h4 {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .check-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 8px 0;
+            padding: 6px 10px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 8px;
+            font-size: 0.85em;
+            transition: all 0.3s ease;
+        }
+
+        .check-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .check-status {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            flex-shrink: 0;
+        }
+
+        .check-status.pending {
+            background: rgba(156, 163, 175, 0.2);
+            color: #9ca3af;
+        }
+
+        .check-status.running {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            animation: pulse 2s infinite;
+        }
+
+        .check-status.pass {
+            background: rgba(52, 211, 153, 0.2);
+            color: #34d399;
+        }
+
+        .check-status.warning {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+        }
+
+        .check-status.fail {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .check-name {
+            flex: 1;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .check-result {
+            font-size: 0.85em;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .toggle-all-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.8);
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-all-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: rgba(255, 255, 255, 1);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
         @media (max-width: 600px) {
+            body {
+                padding: 20px 10px;
+            }
+            
             .container {
                 padding: 30px 20px;
             }
             
             h1 {
                 font-size: 1.5em;
+            }
+            
+            /* Stack result cards on mobile */
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            /* Reduce padding on mobile */
+            .result-card {
+                padding: 15px;
             }
         }
     </style>
@@ -314,21 +674,55 @@
         </div>
         
         <div class="results" id="results">
-            <div class="result-card">
-                <div class="result-header">
-                    <span class="result-title">📍 Location Authenticity</span>
-                    <span class="status-badge" id="locationStatus"></span>
+            <div class="results-grid">
+                <div class="result-card">
+                    <div class="result-header">
+                        <span class="result-title">📍 Location Authenticity</span>
+                        <span class="status-badge" id="locationStatus"></span>
+                    </div>
+                    <div class="detection-details" id="locationDetails"></div>
+                    <div class="coordinates" id="coordinates"></div>
                 </div>
-                <div class="detection-details" id="locationDetails"></div>
-                <div class="coordinates" id="coordinates"></div>
-            </div>
-            
-            <div class="result-card">
-                <div class="result-header">
-                    <span class="result-title">💻 Environment Type</span>
-                    <span class="status-badge" id="environmentStatus"></span>
+                
+                <div class="result-card">
+                    <div class="result-header">
+                        <span class="result-title">💻 Environment Type</span>
+                        <span class="status-badge" id="environmentStatus"></span>
+                    </div>
+                    <div class="detection-details" id="environmentDetails"></div>
                 </div>
-                <div class="detection-details" id="environmentDetails"></div>
+                
+                <div class="result-card" style="grid-column: 1 / -1;">
+                    <div class="result-header">
+                        <span class="result-title">🔍 All Detection Checks</span>
+                        <span class="status-badge" id="overallStatus"></span>
+                    </div>
+                    <div class="detection-details" id="allChecksDetails">
+                        <div style="margin-bottom: 15px;">
+                            <button id="toggleAllCategories" class="toggle-all-btn">Collapse All</button>
+                        </div>
+                        <div class="checks-grid">
+                            <div class="check-category" id="locationCategory">
+                                <h4>📍 Location Verification</h4>
+                                <div class="check-category-content">
+                                    <div id="locationChecks"></div>
+                                </div>
+                            </div>
+                            <div class="check-category" id="environmentCategory">
+                                <h4>💻 Environment Analysis</h4>
+                                <div class="check-category-content">
+                                    <div id="environmentChecks"></div>
+                                </div>
+                            </div>
+                            <div class="check-category" id="networkCategory">
+                                <h4>🌐 Network & Browser</h4>
+                                <div class="check-category-content">
+                                    <div id="networkChecks"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -382,6 +776,159 @@
             locationFlags: []
         };
 
+        // Comprehensive check list
+        const allChecks = {
+            location: [
+                { id: 'geo-api', name: 'Geolocation API Available', status: 'pending', result: '' },
+                { id: 'geo-permission', name: 'Location Permission', status: 'pending', result: '' },
+                { id: 'response-time', name: 'GPS Response Time', status: 'pending', result: '' },
+                { id: 'accuracy', name: 'Location Accuracy', status: 'pending', result: '' },
+                { id: 'null-island', name: 'Null Island Check', status: 'pending', result: '' },
+                { id: 'round-coords', name: 'Coordinate Precision', status: 'pending', result: '' },
+                { id: 'vpn-detection', name: 'VPN/Proxy Detection', status: 'pending', result: '' }
+            ],
+            environment: [
+                { id: 'touch-support', name: 'Touch Event Consistency', status: 'pending', result: '' },
+                { id: 'screen-ratio', name: 'Screen Aspect Ratio', status: 'pending', result: '' },
+                { id: 'color-depth', name: 'Display Color Depth', status: 'pending', result: '' },
+                { id: 'gpu-check', name: 'Graphics Adapter', status: 'pending', result: '' },
+                { id: 'input-timing', name: 'Input Device Timing', status: 'pending', result: '' },
+                { id: 'time-flow', name: 'System Time Consistency', status: 'pending', result: '' }
+            ],
+            network: [
+                { id: 'webrtc-ip', name: 'WebRTC IP Detection', status: 'pending', result: '' },
+                { id: 'multiple-ips', name: 'Multiple IP Check', status: 'pending', result: '' },
+                { id: 'navigator-props', name: 'Browser Properties', status: 'pending', result: '' },
+                { id: 'dns-timing', name: 'DNS Resolution Timing', status: 'pending', result: '' },
+                { id: 'timezone', name: 'Timezone Consistency', status: 'pending', result: '' }
+            ]
+        };
+
+        // Helper function to update check status
+        function updateCheck(category, checkId, status, result = '') {
+            const check = allChecks[category].find(c => c.id === checkId);
+            if (check) {
+                check.status = status;
+                check.result = result;
+                renderChecks();
+            }
+        }
+        
+        // Make updateCheck globally available for API integration
+        window.updateCheck = updateCheck;
+
+        // Render all checks
+        function renderChecks() {
+            const locationChecksEl = document.getElementById('locationChecks');
+            const environmentChecksEl = document.getElementById('environmentChecks');
+            const networkChecksEl = document.getElementById('networkChecks');
+            
+            // Clear existing content
+            locationChecksEl.innerHTML = '';
+            environmentChecksEl.innerHTML = '';
+            networkChecksEl.innerHTML = '';
+            
+            // Render each category
+            renderCheckCategory(allChecks.location, locationChecksEl);
+            renderCheckCategory(allChecks.environment, environmentChecksEl);
+            renderCheckCategory(allChecks.network, networkChecksEl);
+            
+            // Update overall status
+            updateOverallStatus();
+        }
+
+        function renderCheckCategory(checks, container) {
+            checks.forEach(check => {
+                const checkItem = document.createElement('div');
+                checkItem.className = 'check-item';
+                
+                const statusIcon = getStatusIcon(check.status);
+                
+                checkItem.innerHTML = `
+                    <div class="check-status ${check.status}">${statusIcon}</div>
+                    <div class="check-name">${check.name}</div>
+                    <div class="check-result">${check.result}</div>
+                `;
+                
+                container.appendChild(checkItem);
+            });
+        }
+
+        function getStatusIcon(status) {
+            switch(status) {
+                case 'pending': return '○';
+                case 'running': return '◐';
+                case 'pass': return '✓';
+                case 'warning': return '!';
+                case 'fail': return '✗';
+                default: return '?';
+            }
+        }
+
+        function updateOverallStatus() {
+            const allChecksList = [...allChecks.location, ...allChecks.environment, ...allChecks.network];
+            const failCount = allChecksList.filter(c => c.status === 'fail').length;
+            const warningCount = allChecksList.filter(c => c.status === 'warning').length;
+            const passCount = allChecksList.filter(c => c.status === 'pass').length;
+            const totalChecks = allChecksList.length;
+            
+            const overallStatusEl = document.getElementById('overallStatus');
+            
+            if (failCount > 0) {
+                overallStatusEl.textContent = `${failCount} Failed`;
+                overallStatusEl.className = 'status-badge status-spoofed';
+            } else if (warningCount > 0) {
+                overallStatusEl.textContent = `${warningCount} Warnings`;
+                overallStatusEl.className = 'status-badge status-suspicious';
+            } else if (passCount === totalChecks) {
+                overallStatusEl.textContent = 'All Passed';
+                overallStatusEl.className = 'status-badge status-authentic';
+            } else {
+                overallStatusEl.textContent = 'Checking...';
+                overallStatusEl.className = 'status-badge status-suspicious';
+            }
+            
+            // Update category summaries
+            updateCategorySummary('location', allChecks.location);
+            updateCategorySummary('environment', allChecks.environment);
+            updateCategorySummary('network', allChecks.network);
+        }
+        
+        function updateCategorySummary(categoryName, checks) {
+            const categoryEl = document.getElementById(`${categoryName}Category`);
+            if (!categoryEl) return;
+            
+            const header = categoryEl.querySelector('h4');
+            
+            // Remove existing summary if any
+            const existingSummary = header.querySelector('.category-summary');
+            if (existingSummary) {
+                existingSummary.remove();
+            }
+            
+            // Calculate counts
+            const failCount = checks.filter(c => c.status === 'fail').length;
+            const warningCount = checks.filter(c => c.status === 'warning').length;
+            const passCount = checks.filter(c => c.status === 'pass').length;
+            const totalCount = checks.length;
+            
+            // Create summary element
+            const summary = document.createElement('span');
+            summary.className = 'category-summary';
+            
+            if (failCount > 0) {
+                summary.innerHTML += `<span class="category-count" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">${failCount} failed</span>`;
+            }
+            if (warningCount > 0) {
+                summary.innerHTML += `<span class="category-count" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">${warningCount} warning${warningCount > 1 ? 's' : ''}</span>`;
+            }
+            if (passCount === totalCount && totalCount > 0) {
+                summary.innerHTML += `<span class="category-count" style="background: rgba(52, 211, 153, 0.2); color: #34d399;">All passed</span>`;
+            }
+            
+            header.appendChild(summary);
+        }
+
         // Make detectionState globally available for API integration
         window.detectionState = detectionState;
 
@@ -402,6 +949,14 @@
                 locationFlags: []
             };
             
+            // Reset all checks
+            Object.keys(allChecks).forEach(category => {
+                allChecks[category].forEach(check => {
+                    check.status = 'pending';
+                    check.result = '';
+                });
+            });
+            
             // Also update window.detectionState
             window.detectionState = detectionState;
             
@@ -409,7 +964,10 @@
             btn.classList.add('scanning');
             btnText.textContent = '🔄 Scanning...';
             progressBar.style.display = 'block';
-            results.style.display = 'none';
+            results.style.display = 'block'; // Show results immediately
+            
+            // Initial render of all checks
+            renderChecks();
             
             // Run detection phases
             await updateProgress(10);
@@ -438,7 +996,6 @@
                 btnText.textContent = '🔍 Locate Me';
                 progressBar.style.display = 'none';
                 progressFill.style.width = '0%';
-                results.style.display = 'block';
             }, 500);
         }
 
@@ -453,39 +1010,67 @@
         // Environment detection
         async function detectEnvironment() {
             // Check for RDP/VNC indicators
+            updateCheck('environment', 'touch-support', 'running');
             if (navigator.maxTouchPoints === 0 && 'ontouchstart' in window) {
                 detectionState.environmentFlags.push({
                     type: 'warning',
                     message: 'Touch events without touch support',
                     explanation: 'The browser reports touch event capabilities but no touch points are detected. This often indicates remote desktop software that passes through touch events from the host system.'
                 });
+                updateCheck('environment', 'touch-support', 'warning', 'No touch points');
+            } else {
+                updateCheck('environment', 'touch-support', 'pass', 'Consistent');
             }
             
             // Check screen resolution patterns
+            updateCheck('environment', 'screen-ratio', 'running');
             const screenRatio = window.screen.width / window.screen.height;
-            const commonRatios = [16/9, 16/10, 4/3, 21/9];
+            const windowRatio = window.innerWidth / window.innerHeight;
+            const commonRatios = [16/9, 16/10, 4/3, 21/9, 3/2, 5/4, 5/3];
+            
+            // Use window ratio instead of screen ratio for browser windows
+            const ratioToCheck = windowRatio;
             const isCommonRatio = commonRatios.some(ratio => 
-                Math.abs(screenRatio - ratio) < 0.01
+                Math.abs(ratioToCheck - ratio) < 0.1  // Increased threshold for browser windows
             );
             
-            if (!isCommonRatio) {
+            // Only flag if ratio is very unusual (too tall or too wide)
+            const isVeryUnusual = ratioToCheck < 0.5 || ratioToCheck > 3.0;
+            
+            if (isVeryUnusual) {
                 detectionState.environmentFlags.push({
                     type: 'warning',
-                    message: 'Unusual screen aspect ratio',
-                    explanation: `Detected aspect ratio: ${screenRatio.toFixed(2)}. Remote desktop sessions often use non-standard window sizes that don't match typical monitor aspect ratios.`
+                    message: 'Unusual window aspect ratio',
+                    explanation: `Detected window ratio: ${ratioToCheck.toFixed(2)}. This very unusual aspect ratio (${ratioToCheck < 0.5 ? 'extremely tall' : 'extremely wide'}) may indicate a remote desktop session or unusual display configuration.`
                 });
+                updateCheck('environment', 'screen-ratio', 'warning', `${ratioToCheck.toFixed(2)}`);
+            } else if (!isCommonRatio && Math.abs(screenRatio - windowRatio) > 0.3) {
+                // Check if window ratio differs significantly from screen ratio
+                detectionState.environmentFlags.push({
+                    type: 'warning',
+                    message: 'Window size mismatch',
+                    explanation: `Window ratio (${windowRatio.toFixed(2)}) differs significantly from screen ratio (${screenRatio.toFixed(2)}). This might indicate a remote desktop window or virtualized environment.`
+                });
+                updateCheck('environment', 'screen-ratio', 'warning', `Win: ${windowRatio.toFixed(2)}`);
+            } else {
+                updateCheck('environment', 'screen-ratio', 'pass', `${ratioToCheck.toFixed(2)}`);
             }
             
             // Check color depth
+            updateCheck('environment', 'color-depth', 'running');
             if (window.screen.colorDepth < 24) {
                 detectionState.environmentFlags.push({
                     type: 'warning',
                     message: 'Low color depth (possible RDP)',
                     explanation: `Color depth: ${window.screen.colorDepth}-bit. Modern displays use 24-bit or higher. Lower values often indicate remote desktop connections optimizing for bandwidth.`
                 });
+                updateCheck('environment', 'color-depth', 'warning', `${window.screen.colorDepth}-bit`);
+            } else {
+                updateCheck('environment', 'color-depth', 'pass', `${window.screen.colorDepth}-bit`);
             }
             
             // Check for virtual display drivers
+            updateCheck('environment', 'gpu-check', 'running');
             try {
                 const canvas = document.createElement('canvas');
                 const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
@@ -500,13 +1085,22 @@
                                 message: 'Virtual display adapter detected',
                                 explanation: `GPU: ${renderer}. This is a virtual graphics adapter used by virtual machines, not a physical GPU.`
                             });
+                            updateCheck('environment', 'gpu-check', 'fail', 'Virtual GPU');
+                        } else {
+                            updateCheck('environment', 'gpu-check', 'pass', 'Physical GPU');
                         }
+                    } else {
+                        updateCheck('environment', 'gpu-check', 'pass', 'Unknown');
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+                updateCheck('environment', 'gpu-check', 'pass', 'Unable to check');
+            }
             
             // Check keyboard/mouse latency patterns
+            updateCheck('environment', 'input-timing', 'running');
             let lastEventTime = 0;
+            let syntheticDetected = false;
             const checkLatency = (e) => {
                 const now = performance.now();
                 if (lastEventTime && (now - lastEventTime) < 1) {
@@ -515,6 +1109,8 @@
                         message: 'Synthetic input detected',
                         explanation: 'Mouse or keyboard events are occurring faster than humanly possible (<1ms apart). This suggests automated input or remote desktop software.'
                     });
+                    syntheticDetected = true;
+                    updateCheck('environment', 'input-timing', 'warning', 'Too fast');
                 }
                 lastEventTime = now;
             };
@@ -523,6 +1119,9 @@
             document.addEventListener('mousemove', checkLatency);
             setTimeout(() => {
                 document.removeEventListener('mousemove', checkLatency);
+                if (!syntheticDetected) {
+                    updateCheck('environment', 'input-timing', 'pass', 'Normal');
+                }
             }, 1000);
         }
 
@@ -532,6 +1131,7 @@
         // Permission detection
         async function detectPermissions() {
             // Check geolocation permission
+            updateCheck('location', 'geo-permission', 'running');
             try {
                 const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
                 detectionState.permissions.geolocation = permissionStatus.state;
@@ -542,28 +1142,42 @@
                         message: 'Geolocation permission denied',
                         explanation: 'Location access was explicitly denied. This prevents GPS-based verification. You can change this in your browser settings if you want to enable location detection.'
                     });
+                    updateCheck('location', 'geo-permission', 'fail', 'Denied');
+                } else if (permissionStatus.state === 'granted') {
+                    updateCheck('location', 'geo-permission', 'pass', 'Granted');
+                } else {
+                    updateCheck('location', 'geo-permission', 'warning', 'Prompt required');
                 }
             } catch (e) {
                 detectionState.permissions.geolocation = 'unknown';
+                updateCheck('location', 'geo-permission', 'pass', 'Unknown');
             }
         }
 
         // Location detection with multiple verification steps
         async function detectLocation() {
+            updateCheck('location', 'geo-api', 'running');
             if (!navigator.geolocation) {
                 detectionState.locationFlags.push({
                     type: 'fail',
                     message: 'Geolocation API not available',
                     explanation: 'Your browser does not support the Geolocation API. This may be an older browser or one with location services disabled at the system level.'
                 });
+                updateCheck('location', 'geo-api', 'fail', 'Not available');
+                updateCheck('location', 'response-time', 'fail', 'N/A');
+                updateCheck('location', 'accuracy', 'fail', 'N/A');
+                updateCheck('location', 'null-island', 'fail', 'N/A');
+                updateCheck('location', 'round-coords', 'fail', 'N/A');
                 return;
             }
+            
+            updateCheck('location', 'geo-api', 'pass', 'Available');
             
             return new Promise((resolve) => {
                 const startTime = performance.now();
                 
                 navigator.geolocation.getCurrentPosition(
-                    (position) => {
+                    async (position) => {
                         const endTime = performance.now();
                         const duration = endTime - startTime;
                         
@@ -575,42 +1189,82 @@
                         };
                         
                         // Check for suspiciously fast response
+                        updateCheck('location', 'response-time', 'running');
                         if (duration < 10) {
                             detectionState.locationFlags.push({
                                 type: 'warning',
                                 message: 'Location obtained suspiciously fast',
                                 explanation: `Response time: ${duration.toFixed(1)}ms. Real GPS typically takes 100-1000ms. Very fast responses may indicate a location spoofing extension providing cached/fake coordinates.`
                             });
+                            updateCheck('location', 'response-time', 'warning', `${duration.toFixed(0)}ms`);
+                        } else {
+                            updateCheck('location', 'response-time', 'pass', `${duration.toFixed(0)}ms`);
                         }
                         
                         // Check accuracy
+                        updateCheck('location', 'accuracy', 'running');
                         if (position.coords.accuracy > 1000) {
                             detectionState.locationFlags.push({
                                 type: 'warning',
                                 message: 'Low location accuracy',
                                 explanation: `Accuracy: ±${Math.round(position.coords.accuracy)}m. GPS typically provides 5-10m accuracy. High values suggest IP-based geolocation or poor GPS signal.`
                             });
+                            updateCheck('location', 'accuracy', 'warning', `±${Math.round(position.coords.accuracy)}m`);
+                        } else {
+                            updateCheck('location', 'accuracy', 'pass', `±${Math.round(position.coords.accuracy)}m`);
                         }
                         
                         // Check for common spoofing coordinates
                         const lat = position.coords.latitude;
                         const lon = position.coords.longitude;
                         
+                        updateCheck('location', 'null-island', 'running');
                         if (lat === 0 && lon === 0) {
                             detectionState.locationFlags.push({
                                 type: 'fail',
                                 message: 'Null Island coordinates detected',
                                 explanation: 'Coordinates (0°, 0°) point to "Null Island" in the Atlantic Ocean. This is a common default value used by spoofing tools.'
                             });
+                            updateCheck('location', 'null-island', 'fail', 'Detected');
+                        } else {
+                            updateCheck('location', 'null-island', 'pass', 'Valid coords');
                         }
                         
                         // Check for overly round numbers
+                        updateCheck('location', 'round-coords', 'running');
                         if (lat % 1 === 0 && lon % 1 === 0) {
                             detectionState.locationFlags.push({
                                 type: 'warning',
                                 message: 'Suspiciously round coordinates',
                                 explanation: `Coordinates are exact integers (${lat}°, ${lon}°). Real GPS coordinates typically have decimal precision. Round numbers suggest manual input or basic spoofing.`
                             });
+                            updateCheck('location', 'round-coords', 'warning', 'Too round');
+                        } else {
+                            updateCheck('location', 'round-coords', 'pass', 'Normal precision');
+                        }
+                        
+                        // Check VPN if API is available
+                        if (typeof USE_API !== 'undefined' && USE_API) {
+                            updateCheck('location', 'vpn-detection', 'running');
+                            try {
+                                const vpnResponse = await fetch('/api/vpn/check');
+                                const vpnData = await vpnResponse.json();
+                                
+                                if (vpnData.isVPN) {
+                                    detectionState.locationFlags.push({
+                                        type: 'warning',
+                                        message: 'VPN/Proxy detected',
+                                        explanation: vpnData.explanation
+                                    });
+                                    updateCheck('location', 'vpn-detection', 'warning', `${vpnData.confidence}% confidence`);
+                                } else {
+                                    updateCheck('location', 'vpn-detection', 'pass', 'No VPN');
+                                }
+                            } catch (e) {
+                                updateCheck('location', 'vpn-detection', 'pass', 'Unable to check');
+                            }
+                        } else {
+                            updateCheck('location', 'vpn-detection', 'pass', 'API not available');
                         }
                         
                         resolve();
@@ -636,6 +1290,13 @@
                             message: `Location error: ${error.message}`,
                             explanation: explanation
                         });
+                        
+                        updateCheck('location', 'response-time', 'fail', 'Error');
+                        updateCheck('location', 'accuracy', 'fail', 'Error');
+                        updateCheck('location', 'null-island', 'fail', 'Error');
+                        updateCheck('location', 'round-coords', 'fail', 'Error');
+                        updateCheck('location', 'vpn-detection', 'fail', 'Error');
+                        
                         resolve();
                     },
                     {
@@ -652,6 +1313,8 @@
 
         // Timing anomaly detection
         async function detectTimingAnomalies() {
+            updateCheck('environment', 'time-flow', 'running');
+            
             // Check system time consistency
             const jsTime = Date.now();
             const perfTime = performance.now();
@@ -682,6 +1345,9 @@
                     message: 'Time flow irregularities detected',
                     explanation: `Found ${irregularities} timing inconsistencies between JavaScript Date and Performance timers. This may indicate time manipulation or virtualization overhead affecting system timing.`
                 });
+                updateCheck('environment', 'time-flow', 'warning', `${irregularities} anomalies`);
+            } else {
+                updateCheck('environment', 'time-flow', 'pass', 'Consistent');
             }
         }
 
@@ -691,7 +1357,10 @@
             try {
                 // Method 1: Check for modified navigator properties (common with VPN extensions)
                 if (CONFIG.DETECTION_METHODS.NAVIGATOR_PROPERTIES_CHECK) {
+                    updateCheck('network', 'navigator-props', 'running');
                     const suspiciousProperties = ['brave', 'globalPrivacyControl'];
+                    let foundProps = [];
+                    
                     suspiciousProperties.forEach(prop => {
                         if (prop in navigator) {
                             detectionState.locationFlags.push({
@@ -699,12 +1368,21 @@
                                 message: `Detected ${prop} property (possible privacy extension)`,
                                 explanation: `The navigator.${prop} property is present. This is added by privacy-focused browsers or extensions and may affect location accuracy.`
                             });
+                            foundProps.push(prop);
                         }
                     });
+                    
+                    if (foundProps.length > 0) {
+                        updateCheck('network', 'navigator-props', 'warning', foundProps.join(', '));
+                    } else {
+                        updateCheck('network', 'navigator-props', 'pass', 'Standard');
+                    }
                 }
                 
                 // Method 2: Check WebRTC for real IP vs VPN IP
                 if (CONFIG.DETECTION_METHODS.WEBRTC_CHECK) {
+                    updateCheck('network', 'webrtc-ip', 'running');
+                    let hasPrivateIp = false;
                     try {
                         const pc = new RTCPeerConnection({
                             iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
@@ -740,13 +1418,23 @@
                                                 message: 'Private IP detected (possible VPN)',
                                                 explanation: `WebRTC revealed private IP: ${ip}. This is a local network address that may indicate VPN usage, as VPNs often create virtual network adapters with private IPs.`
                                             });
+                                            hasPrivateIp = true;
                                         }
                                     });
                                 }
                             };
                         });
                         
+                        if (hasPrivateIp) {
+                            updateCheck('network', 'webrtc-ip', 'warning', 'Private IPs found');
+                        } else if (ips.length > 0) {
+                            updateCheck('network', 'webrtc-ip', 'pass', `${ips.length} IPs found`);
+                        } else {
+                            updateCheck('network', 'webrtc-ip', 'pass', 'No IPs leaked');
+                        }
+                        
                         // Check for multiple public IPs (VPN indicator)
+                        updateCheck('network', 'multiple-ips', 'running');
                         const publicIps = ips.filter(ip => 
                             !ip.startsWith('10.') && 
                             !ip.startsWith('172.') && 
@@ -760,20 +1448,30 @@
                                 message: 'Multiple public IPs detected (possible VPN)',
                                 explanation: `Found ${publicIps.length} public IPs: ${publicIps.join(', ')}. Multiple public IPs often indicate VPN or proxy usage, as traffic may be routed through different exit points.`
                             });
+                            updateCheck('network', 'multiple-ips', 'warning', `${publicIps.length} public IPs`);
+                        } else {
+                            updateCheck('network', 'multiple-ips', 'pass', `${publicIps.length} public IP`);
                         }
                     } catch (e) {
                         // WebRTC might be disabled
                         CONFIG.log('WebRTC detection skipped:', e.message);
+                        updateCheck('network', 'webrtc-ip', 'pass', 'WebRTC disabled');
+                        updateCheck('network', 'multiple-ips', 'pass', 'WebRTC disabled');
                     }
+                } else {
+                    updateCheck('network', 'webrtc-ip', 'pass', 'Check disabled');
+                    updateCheck('network', 'multiple-ips', 'pass', 'Check disabled');
                 }
                 
                 // Method 3: Check for DNS leaks via timing
                 if (CONFIG.DETECTION_METHODS.DNS_TIMING_CHECK) {
+                    updateCheck('network', 'dns-timing', 'running');
                     try {
                         const dnsTestDomains = [
                             'dns-leak-test-' + Math.random().toString(36).substr(2, 9) + '.com'
                         ];
                         
+                        let suspiciousTiming = false;
                         for (const domain of dnsTestDomains) {
                             const startTime = performance.now();
                             try {
@@ -786,29 +1484,44 @@
                                 // Expected to fail
                             }
                             const endTime = performance.now();
+                            const dnsTime = endTime - startTime;
                             
                             // Suspiciously fast DNS resolution might indicate local VPN DNS
-                            if (endTime - startTime < 5) {
+                            if (dnsTime < 5) {
                                 detectionState.environmentFlags.push({
                                     type: 'warning',
                                     message: 'Unusual DNS resolution timing',
-                                    explanation: `DNS lookup completed in ${(endTime - startTime).toFixed(1)}ms. Extremely fast DNS resolution (<5ms) may indicate a local DNS cache or VPN software intercepting DNS queries.`
+                                    explanation: `DNS lookup completed in ${dnsTime.toFixed(1)}ms. Extremely fast DNS resolution (<5ms) may indicate a local DNS cache or VPN software intercepting DNS queries.`
                                 });
+                                suspiciousTiming = true;
+                                updateCheck('network', 'dns-timing', 'warning', `${dnsTime.toFixed(0)}ms`);
                             }
+                        }
+                        
+                        if (!suspiciousTiming) {
+                            updateCheck('network', 'dns-timing', 'pass', 'Normal');
                         }
                     } catch (e) {
                         CONFIG.log('DNS timing check skipped:', e.message);
+                        updateCheck('network', 'dns-timing', 'pass', 'Unable to check');
                     }
+                } else {
+                    updateCheck('network', 'dns-timing', 'pass', 'Check disabled');
                 }
                 
                 // Method 4: Check timezone consistency
                 if (CONFIG.DETECTION_METHODS.TIMEZONE_CHECK) {
+                    updateCheck('network', 'timezone', 'running');
                     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
                     if (detectionState.location) {
                         // This is a simplified check - in production, you'd use a timezone API
                         const expectedOffset = new Date().getTimezoneOffset();
-                        // Add logic to verify timezone matches location
+                        updateCheck('network', 'timezone', 'pass', timezone);
+                    } else {
+                        updateCheck('network', 'timezone', 'pass', timezone);
                     }
+                } else {
+                    updateCheck('network', 'timezone', 'pass', 'Check disabled');
                 }
             } catch (e) {
                 CONFIG.log('Browser consistency check error:', e);
@@ -966,6 +1679,63 @@
 
         // Add click handler for the main detection function
         document.getElementById('locateBtn').addEventListener('click', startDetection);
+        
+        // Setup collapse/expand functionality for check categories
+        function setupCategoryCollapse() {
+            const categories = document.querySelectorAll('.check-category');
+            
+            categories.forEach(category => {
+                const header = category.querySelector('h4');
+                const categoryId = category.id;
+                
+                // Load saved collapse state from localStorage
+                const savedState = localStorage.getItem(`category-${categoryId}`);
+                if (savedState === 'collapsed') {
+                    category.classList.add('collapsed');
+                }
+                
+                header.addEventListener('click', () => {
+                    category.classList.toggle('collapsed');
+                    
+                    // Save state to localStorage
+                    if (category.classList.contains('collapsed')) {
+                        localStorage.setItem(`category-${categoryId}`, 'collapsed');
+                    } else {
+                        localStorage.removeItem(`category-${categoryId}`);
+                    }
+                });
+            });
+            
+            // Toggle all button functionality
+            const toggleAllBtn = document.getElementById('toggleAllCategories');
+            if (toggleAllBtn) {
+                toggleAllBtn.addEventListener('click', () => {
+                    const allCollapsed = Array.from(categories).every(cat => cat.classList.contains('collapsed'));
+                    
+                    categories.forEach(category => {
+                        if (allCollapsed) {
+                            // Expand all
+                            category.classList.remove('collapsed');
+                            localStorage.removeItem(`category-${category.id}`);
+                        } else {
+                            // Collapse all
+                            category.classList.add('collapsed');
+                            localStorage.setItem(`category-${category.id}`, 'collapsed');
+                        }
+                    });
+                    
+                    // Update button text
+                    toggleAllBtn.textContent = allCollapsed ? 'Collapse All' : 'Expand All';
+                });
+                
+                // Set initial button text based on current state
+                const allCollapsed = Array.from(categories).every(cat => cat.classList.contains('collapsed'));
+                toggleAllBtn.textContent = allCollapsed ? 'Expand All' : 'Collapse All';
+            }
+        }
+        
+        // Initialize collapse functionality after DOM is loaded
+        setupCategoryCollapse();
         
         console.log('Main script finished loading');
         console.log('Functions available:', {
