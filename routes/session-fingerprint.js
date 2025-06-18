@@ -54,8 +54,8 @@ function generateSessionFingerprint(detectionData) {
             platform: environment?.platform || null,
             timezone: environment?.timezone || null,
             language: environment?.language || null,
-            cpuCores: environment?.cpuCores || cpuCores,
-            deviceMemory: environment?.deviceMemory || deviceMemory,
+            cpuCores: environment?.cpuCores || null,
+            deviceMemory: environment?.deviceMemory || null,
             flags: environment?.flags || []
         },
         
