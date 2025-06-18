@@ -14,6 +14,29 @@ router.post('/location/verify', async (req, res) => {
     try {
         const { latitude, longitude, accuracy, timestamp } = req.body;
         
+        console.log('[API] Location verify request:', {
+            body: req.body,
+            ip: req.ip,
+            headers: req.headers
+        });
+        
+        if (latitude === null || longitude === null) {
+            // Handle case where location is not available
+            return res.json({
+                status: 'unable_to_verify',
+                score: 0,
+                flags: [
+                    { type: 'fail', message: 'Location data not provided' }
+                ],
+                analysis: {
+                    coordinates: null,
+                    accuracy: null,
+                    timestamp: new Date().toISOString(),
+                    age: 0
+                }
+            });
+        }
+        
         if (!latitude || !longitude) {
             return res.status(400).json({ 
                 error: 'Missing required location data' 
@@ -26,7 +49,7 @@ router.post('/location/verify', async (req, res) => {
             longitude,
             accuracy,
             timestamp,
-            clientIp: req.ip,
+            clientIp: getClientIp(req),
             userAgent: req.headers['user-agent']
         });
 
@@ -110,7 +133,7 @@ router.post('/detection/store', async (req, res) => {
             sessionId,
             results,
             timestamp: new Date().toISOString(),
-            clientIp: req.ip
+            clientIp: getClientIp(req)
         };
 
         res.json({ 
@@ -124,6 +147,24 @@ router.post('/detection/store', async (req, res) => {
 });
 
 // ==================== Utility Functions ====================
+
+function getClientIp(req) {
+    // Try various headers that might contain the real IP
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+        return forwarded.split(',')[0].trim();
+    }
+    
+    if (req.headers['x-real-ip']) {
+        return req.headers['x-real-ip'];
+    }
+    
+    if (req.connection && req.connection.remoteAddress) {
+        return req.connection.remoteAddress;
+    }
+    
+    return req.ip || 'unknown';
+}
 
 async function verifyLocation(data) {
     const { latitude, longitude, accuracy, timestamp, clientIp, userAgent } = data;

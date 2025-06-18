@@ -356,6 +356,9 @@
                 locationFlags: []
             };
             
+            // Also update window.detectionState
+            window.detectionState = detectionState;
+            
             // Update UI
             btn.classList.add('scanning');
             btnText.textContent = '🔄 Scanning...';

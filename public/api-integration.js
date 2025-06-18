@@ -135,8 +135,15 @@ async function detectLocationWithAPI() {
     }
 
     return new Promise((resolve) => {
+        const startTime = performance.now();
+        
         navigator.geolocation.getCurrentPosition(
             async (position) => {
+                const endTime = performance.now();
+                const duration = endTime - startTime;
+                
+                console.log('Geolocation success:', position);
+                
                 // Store location locally
                 window.detectionState.location = {
                     latitude: position.coords.latitude,
@@ -144,18 +151,41 @@ async function detectLocationWithAPI() {
                     accuracy: position.coords.accuracy,
                     timestamp: position.timestamp
                 };
+                
+                console.log('Location stored in detectionState:', window.detectionState.location);
+                
+                // Check for suspiciously fast response (client-side check)
+                if (duration < 10) {
+                    window.detectionState.locationFlags.push({
+                        type: 'warning',
+                        message: 'Location obtained suspiciously fast'
+                    });
+                }
 
                 // Verify with API
-                const verificationResult = await geoSpoofAPI.verifyLocation({
+                const locationData = {
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude,
                     accuracy: position.coords.accuracy,
                     timestamp: position.timestamp
-                });
+                };
+                
+                console.log('Sending location data to API:', locationData);
+                
+                const verificationResult = await geoSpoofAPI.verifyLocation(locationData);
 
                 if (verificationResult) {
-                    // Use API results
-                    window.detectionState.locationFlags = verificationResult.flags || [];
+                    // Merge API results with existing flags
+                    if (verificationResult.flags && verificationResult.flags.length > 0) {
+                        window.detectionState.locationFlags = [
+                            ...window.detectionState.locationFlags,
+                            ...verificationResult.flags
+                        ];
+                    }
+                    
+                    // Store the verification status
+                    window.detectionState.verificationStatus = verificationResult.status;
+                    window.detectionState.verificationScore = verificationResult.score;
                     
                     // Get additional metadata
                     const metadata = await geoSpoofAPI.getLocationMetadata(
@@ -166,15 +196,47 @@ async function detectLocationWithAPI() {
                     if (metadata) {
                         window.detectionState.location.metadata = metadata;
                     }
+                } else {
+                    // API call failed, add a flag
+                    window.detectionState.locationFlags.push({
+                        type: 'warning',
+                        message: 'Could not verify location with server'
+                    });
                 }
 
                 resolve();
             },
             (error) => {
+                console.error('Geolocation error:', error);
                 window.detectionState.locationFlags.push({
                     type: 'fail',
                     message: `Location error: ${error.message}`
                 });
+                
+                // Still call the API even on error
+                geoSpoofAPI.verifyLocation({
+                    latitude: null,
+                    longitude: null,
+                    accuracy: null,
+                    timestamp: Date.now(),
+                    error: error.message
+                }).then(verificationResult => {
+                    console.log('API response for location error:', verificationResult);
+                    if (verificationResult) {
+                        // Store the verification status
+                        window.detectionState.verificationStatus = verificationResult.status;
+                        window.detectionState.verificationScore = verificationResult.score;
+                        
+                        // Merge flags
+                        if (verificationResult.flags && verificationResult.flags.length > 0) {
+                            window.detectionState.locationFlags = [
+                                ...window.detectionState.locationFlags,
+                                ...verificationResult.flags
+                            ];
+                        }
+                    }
+                });
+                
                 resolve();
             },
             {
@@ -183,6 +245,28 @@ async function detectLocationWithAPI() {
                 maximumAge: 0
             }
         );
+        
+        // Add a timeout fallback
+        setTimeout(() => {
+            if (!window.detectionState.location) {
+                console.log('Geolocation timed out, using API without location data');
+                // Still call the API even without location data
+                geoSpoofAPI.verifyLocation({
+                    latitude: null,
+                    longitude: null,
+                    accuracy: null,
+                    timestamp: Date.now()
+                }).then(verificationResult => {
+                    if (verificationResult) {
+                        window.detectionState.locationFlags = [
+                            { type: 'fail', message: 'Location not available' },
+                            ...(verificationResult.flags || [])
+                        ];
+                    }
+                });
+                resolve();
+            }
+        }, 5000);
     });
 }
 
@@ -221,8 +305,21 @@ async function detectEnvironmentWithAPI() {
     const analysisResult = await geoSpoofAPI.analyzeEnvironment(environmentData);
 
     if (analysisResult) {
-        window.detectionState.environmentFlags = analysisResult.flags || [];
+        // Merge API results with existing flags
+        if (analysisResult.flags && analysisResult.flags.length > 0) {
+            window.detectionState.environmentFlags = [
+                ...window.detectionState.environmentFlags,
+                ...analysisResult.flags
+            ];
+        }
         window.detectionState.environmentType = analysisResult.environmentType;
+        window.detectionState.environmentScore = analysisResult.score;
+    } else {
+        // API call failed, add a flag
+        window.detectionState.environmentFlags.push({
+            type: 'warning',
+            message: 'Could not analyze environment with server'
+        });
     }
 }
 
@@ -283,7 +380,86 @@ function setupAPIIntegration() {
         console.log('Adding hook to analyzeResults');
         const originalAnalyzeResults = window.analyzeResults;
         window.analyzeResults = function() {
+            // Call original function first
             originalAnalyzeResults();
+            
+            // Override location status if we have API verification results
+            if (window.detectionState.verificationStatus) {
+                const locationStatus = document.getElementById('locationStatus');
+                const coordinates = document.getElementById('coordinates');
+                
+                // Map API status to UI status
+                let statusText = 'Authentic';
+                let statusClass = 'status-authentic';
+                
+                switch (window.detectionState.verificationStatus) {
+                    case 'likely_spoofed':
+                        statusText = 'Likely Spoofed';
+                        statusClass = 'status-spoofed';
+                        break;
+                    case 'suspicious':
+                        statusText = 'Suspicious';
+                        statusClass = 'status-suspicious';
+                        break;
+                    case 'unable_to_verify':
+                        statusText = 'Unable to Verify';
+                        statusClass = 'status-spoofed';
+                        break;
+                    case 'authentic':
+                    default:
+                        statusText = 'Authentic';
+                        statusClass = 'status-authentic';
+                        break;
+                }
+                
+                // Use API score if location not available
+                if (!window.detectionState.location && window.detectionState.verificationScore !== undefined) {
+                    const score = window.detectionState.verificationScore;
+                    if (score < 60) {
+                        statusText = 'Likely Spoofed';
+                        statusClass = 'status-spoofed';
+                    } else if (score < 80) {
+                        statusText = 'Suspicious';
+                        statusClass = 'status-suspicious';
+                    }
+                }
+                
+                locationStatus.textContent = statusText;
+                locationStatus.className = `status-badge ${statusClass}`;
+            }
+            
+            // Override environment status if we have API results
+            if (window.detectionState.environmentType) {
+                const environmentStatus = document.getElementById('environmentStatus');
+                
+                let statusText = 'Local Desktop';
+                let statusClass = 'status-authentic';
+                
+                switch (window.detectionState.environmentType) {
+                    case 'remote_desktop':
+                        statusText = 'Remote Desktop';
+                        statusClass = 'status-spoofed';
+                        break;
+                    case 'possibly_remote':
+                        statusText = 'Possibly Remote';
+                        statusClass = 'status-suspicious';
+                        break;
+                    case 'virtual_machine':
+                        statusText = 'Virtual Machine';
+                        statusClass = 'status-spoofed';
+                        break;
+                    case 'local_desktop':
+                    default:
+                        statusText = 'Local Desktop';
+                        statusClass = 'status-authentic';
+                        break;
+                }
+                
+                environmentStatus.textContent = statusText;
+                environmentStatus.className = `status-badge ${statusClass}`;
+            }
+            
+            console.log('Final detectionState after analysis:', window.detectionState);
             storeDetectionResultsAPI();
         };
     }
