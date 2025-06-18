@@ -281,7 +281,7 @@
         <h1>Location Authenticity Detector</h1>
         <p class="subtitle">Verify genuine location & detect remote environments</p>
         
-        <button class="locate-btn" id="locateBtn" onclick="startDetection()">
+        <button class="locate-btn" id="locateBtn">
             <span id="btnText">🔍 Locate Me</span>
         </button>
         
@@ -755,6 +755,9 @@
             this.appendChild(ripple);
             setTimeout(() => ripple.remove(), 600);
         });
+
+        // Add click handler for the main detection function
+        document.getElementById('locateBtn').addEventListener('click', startDetection);
     </script>
 </body>
 </html>
