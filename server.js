@@ -44,6 +44,11 @@ app.get('/api-integration.js', (req, res) => {
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Serve thresholds.json
+app.get('/thresholds.json', (req, res) => {
+    res.sendFile(path.join(__dirname, 'thresholds.json'));
+});
+
 // API Routes
 const apiRouter = require('./routes/api');
 app.use('/api', apiRouter);

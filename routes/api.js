@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { detectVPN, getVPNExplanation } = require('./vpn-detection');
+const { getThresholds } = require('./threshold-config');
 const { 
     generateSessionFingerprint,
     fingerprintToText,
@@ -8,7 +9,8 @@ const {
     initializeQdrantCollection,
     storeSessionFingerprint,
     findSimilarSessions,
-    evaluateSimilarity
+    evaluateSimilarity,
+    evaluateLite
 } = require('./session-fingerprint');
 
 // Initialize Qdrant collection on startup
@@ -104,33 +106,72 @@ router.get('/location/metadata', async (req, res) => {
 
 // Analyze client environment
 router.post('/environment/analyze', async (req, res) => {
-    try {
-        const {
-            screenResolution,
-            colorDepth,
-            touchSupport,
-            webglRenderer,
-            timezone,
-            language,
-            platform
-        } = req.body;
+    const { 
+        screenResolution, 
+        colorDepth, 
+        touchSupport, 
+        webglRenderer,
+        timezone,
+        language,
+        platform
+    } = req.body;
 
-        const analysis = analyzeEnvironment({
-            screenResolution,
-            colorDepth,
-            touchSupport,
-            webglRenderer,
-            timezone,
-            language,
-            platform,
-            userAgent: req.headers['user-agent']
-        });
+    const flags = [];
+    let score = 100;
+    
+    const thresholds = getThresholds();
 
-        res.json(analysis);
-    } catch (error) {
-        console.error('Environment analysis error:', error);
-        res.status(500).json({ error: 'Failed to analyze environment' });
+    // Check for virtual machine indicators
+    if (webglRenderer) {
+        const renderer = webglRenderer.toLowerCase();
+        if (renderer.includes('vmware') || renderer.includes('virtualbox')) {
+            flags.push({ type: 'fail', message: 'Virtual machine detected' });
+            score -= 50;
+        }
     }
+
+    // Check for RDP indicators
+    if (colorDepth < thresholds.environment.colorDepth.rdpIndicator) {
+        flags.push({ type: 'warning', message: 'Low color depth (possible RDP)' });
+        score -= 25;
+    }
+
+    // Check for unusual resolutions
+    const commonResolutions = [
+        '1920x1080', '1366x768', '1440x900', '1536x864', '1280x720',
+        '2560x1440', '3840x2160', '1680x1050', '1600x900', '1280x800'
+    ];
+    
+    const resString = `${screenResolution.width}x${screenResolution.height}`;
+    if (!commonResolutions.includes(resString)) {
+        flags.push({ type: 'warning', message: 'Unusual screen resolution' });
+        score -= 15;
+    }
+
+    // Determine environment type
+    let environmentType = 'local_desktop';
+    if (score < thresholds.environment.score.likelyRemote) {
+        environmentType = 'remote_desktop';
+    } else if (score < thresholds.environment.score.possiblyRemote) {
+        environmentType = 'possibly_remote';
+    }
+
+    const analysis = {
+        environmentType,
+        score,
+        flags,
+        details: {
+            screenResolution,
+            colorDepth,
+            touchSupport,
+            webglRenderer,
+            platform,
+            timezone,
+            language
+        }
+    };
+
+    res.json(analysis);
 });
 
 // ==================== Detection History API ====================
@@ -337,7 +378,6 @@ router.post('/session/analyze-lite', async (req, res) => {
         const similarSessions = await findSimilarSessions(embedding, 3);
         
         // Perform lite evaluation
-        const { evaluateLite } = require('./session-fingerprint');
         const liteEvaluation = await evaluateLite(fingerprint, similarSessions);
         
         res.json({
@@ -372,6 +412,332 @@ router.get('/session/analysis/:sessionId', async (req, res) => {
         res.status(500).json({ error: 'Failed to get session analysis' });
     }
 });
+
+// Store grouped sessions (multiple detection runs)
+router.post('/session/store-group', async (req, res) => {
+    try {
+        const { groupSessionId, sessions, metadata } = req.body;
+        
+        if (!sessions || !Array.isArray(sessions) || sessions.length === 0) {
+            return res.status(400).json({ error: 'Sessions array is required' });
+        }
+        
+        // Generate group session ID if not provided
+        const groupId = groupSessionId || generateId();
+        
+        // Process each session in the group
+        const processedSessions = [];
+        const embeddings = [];
+        
+        for (const session of sessions) {
+            // Add group reference to each session
+            const enrichedSession = {
+                ...session,
+                groupSessionId: groupId,
+                groupIndex: processedSessions.length
+            };
+            
+            // Generate fingerprint if not already present
+            const detectionData = {
+                location: session.location,
+                environment: session.environment,
+                network: session.network,
+                timestamp: session.timestamp,
+                userAgent: req.headers['user-agent'],
+                clientIp: getClientIp(req),
+                detectionResults: {
+                    locationScore: session.scores?.location || 0,
+                    environmentScore: session.scores?.environment || 0,
+                    locationFlags: session.locationFlags || [],
+                    environmentFlags: session.environmentFlags || []
+                }
+            };
+            
+            const fingerprint = generateSessionFingerprint(detectionData);
+            enrichedSession.fingerprint = session.fingerprint || fingerprint;
+            
+            // Generate embedding
+            const fingerprintText = fingerprintToText(fingerprint);
+            const embedding = await generateEmbedding(fingerprintText);
+            
+            embeddings.push(embedding);
+            processedSessions.push(enrichedSession);
+        }
+        
+        // Store each session in Qdrant
+        const storedSessionIds = [];
+        for (let i = 0; i < processedSessions.length; i++) {
+            const sessionId = await storeSessionFingerprint(
+                processedSessions[i].fingerprint,
+                embeddings[i]
+            );
+            storedSessionIds.push(sessionId);
+        }
+        
+        // Create group summary
+        const groupSummary = {
+            groupSessionId: groupId,
+            timestamp: new Date().toISOString(),
+            sessionCount: sessions.length,
+            sessionIds: storedSessionIds,
+            metadata: metadata || {},
+            analysis: analyzeGroupedSessions(sessions),
+            clientIp: getClientIp(req),
+            userAgent: req.headers['user-agent']
+        };
+        
+        // Store group summary (in a real app, this would go to a database)
+        // For now, we'll include it in the response
+        
+        res.json({
+            success: true,
+            groupSessionId: groupId,
+            sessionCount: sessions.length,
+            storedSessionIds,
+            groupSummary
+        });
+    } catch (error) {
+        console.error('Group session store error:', error);
+        res.status(500).json({ error: 'Failed to store grouped sessions' });
+    }
+});
+
+// Store session with multiple detections as array
+router.post('/session/store-multi', async (req, res) => {
+    try {
+        const { sessionId, startTime, endTime, detections, metadata, summary } = req.body;
+        
+        if (!detections || !Array.isArray(detections) || detections.length === 0) {
+            return res.status(400).json({ error: 'Detections array is required' });
+        }
+        
+        // Use provided sessionId or generate new one
+        const finalSessionId = sessionId || generateId();
+        
+        // Process each detection
+        const processedDetections = [];
+        const embeddings = [];
+        
+        for (let i = 0; i < detections.length; i++) {
+            const detection = detections[i];
+            
+            // Generate fingerprint for each detection
+            const detectionData = {
+                location: detection.location,
+                environment: detection.environment,
+                network: detection.network,
+                timestamp: detection.timestamp || detection.detectionTimestamp,
+                userAgent: req.headers['user-agent'],
+                clientIp: getClientIp(req),
+                detectionResults: {
+                    locationScore: detection.scores?.location || 0,
+                    environmentScore: detection.scores?.environment || 0,
+                    locationFlags: detection.locationFlags || [],
+                    environmentFlags: detection.environmentFlags || []
+                }
+            };
+            
+            const fingerprint = generateSessionFingerprint(detectionData);
+            
+            // Generate embedding
+            const fingerprintText = fingerprintToText(fingerprint);
+            const embedding = await generateEmbedding(fingerprintText);
+            
+            embeddings.push(embedding);
+            processedDetections.push({
+                ...detection,
+                fingerprint: detection.fingerprint || fingerprint,
+                detectionIndex: i,
+                sessionId: finalSessionId
+            });
+        }
+        
+        // Store complete session in Qdrant with aggregated fingerprint
+        const sessionFingerprint = {
+            sessionId: finalSessionId,
+            startTime: startTime || detections[0]?.timestamp,
+            endTime: endTime || detections[detections.length - 1]?.timestamp,
+            detectionCount: detections.length,
+            metadata: metadata || {},
+            summary: summary || analyzeGroupedSessions(detections),
+            detections: processedDetections.map(d => ({
+                index: d.detectionIndex,
+                timestamp: d.timestamp || d.detectionTimestamp,
+                scores: d.scores,
+                fingerprint: d.fingerprint
+            }))
+        };
+        
+        // Generate session-level embedding (average of detection embeddings)
+        const sessionEmbedding = embeddings[0].map((_, idx) => {
+            const sum = embeddings.reduce((acc, emb) => acc + emb[idx], 0);
+            return sum / embeddings.length;
+        });
+        
+        // Store in Qdrant
+        const storedId = await storeSessionFingerprint(sessionFingerprint, sessionEmbedding);
+        
+        res.json({
+            success: true,
+            sessionId: finalSessionId,
+            storedId: storedId,
+            detectionCount: detections.length,
+            summary: sessionFingerprint.summary
+        });
+    } catch (error) {
+        console.error('Multi-detection session store error:', error);
+        res.status(500).json({ error: 'Failed to store multi-detection session' });
+    }
+});
+
+// Retrieve session with multiple detections
+router.get('/session/multi/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        
+        // In a real implementation, this would:
+        // 1. Retrieve session from Qdrant by sessionId
+        // 2. Return the complete session with all detections
+        
+        res.json({
+            success: true,
+            sessionId,
+            message: 'Multi-detection session retrieval - implement Qdrant retrieval'
+        });
+    } catch (error) {
+        console.error('Session retrieval error:', error);
+        res.status(500).json({ error: 'Failed to retrieve session' });
+    }
+});
+
+// Retrieve grouped sessions
+router.get('/session/group/:groupSessionId', async (req, res) => {
+    try {
+        const { groupSessionId } = req.params;
+        
+        // In a real implementation, this would:
+        // 1. Retrieve group metadata from database
+        // 2. Fetch all sessions belonging to this group from Qdrant
+        // 3. Return the complete group data
+        
+        res.json({
+            success: true,
+            groupSessionId,
+            message: 'Group retrieval endpoint - implement database/Qdrant retrieval'
+        });
+    } catch (error) {
+        console.error('Group retrieval error:', error);
+        res.status(500).json({ error: 'Failed to retrieve grouped sessions' });
+    }
+});
+
+// Analyze grouped sessions for patterns
+function analyzeGroupedSessions(sessions) {
+    if (!sessions || sessions.length === 0) return null;
+    
+    const analysis = {
+        totalSessions: sessions.length,
+        timeSpan: null,
+        locationVariance: {},
+        scoreStatistics: {},
+        flagFrequency: {},
+        consistencyMetrics: {}
+    };
+    
+    // Calculate time span
+    const timestamps = sessions.map(s => new Date(s.timestamp).getTime());
+    const minTime = Math.min(...timestamps);
+    const maxTime = Math.max(...timestamps);
+    analysis.timeSpan = {
+        start: new Date(minTime).toISOString(),
+        end: new Date(maxTime).toISOString(),
+        durationMs: maxTime - minTime
+    };
+    
+    // Analyze location variance
+    const locations = sessions.map(s => s.location).filter(Boolean);
+    if (locations.length > 0) {
+        const lats = locations.map(l => l.latitude);
+        const lons = locations.map(l => l.longitude);
+        
+        analysis.locationVariance = {
+            latitude: {
+                min: Math.min(...lats),
+                max: Math.max(...lats),
+                variance: calculateVariance(lats)
+            },
+            longitude: {
+                min: Math.min(...lons),
+                max: Math.max(...lons),
+                variance: calculateVariance(lons)
+            }
+        };
+    }
+    
+    // Analyze score statistics
+    const scoreTypes = ['location', 'environment', 'network', 'overall'];
+    scoreTypes.forEach(type => {
+        const scores = sessions.map(s => s.scores?.[type] || 0);
+        analysis.scoreStatistics[type] = {
+            min: Math.min(...scores),
+            max: Math.max(...scores),
+            average: scores.reduce((a, b) => a + b, 0) / scores.length,
+            variance: calculateVariance(scores)
+        };
+    });
+    
+    // Analyze flag frequency
+    const allFlags = [];
+    sessions.forEach(session => {
+        ['locationFlags', 'environmentFlags', 'networkFlags'].forEach(flagType => {
+            if (session[flagType]) {
+                session[flagType].forEach(flag => {
+                    allFlags.push({
+                        type: flagType,
+                        message: flag.message,
+                        severity: flag.type
+                    });
+                });
+            }
+        });
+    });
+    
+    // Count flag occurrences
+    allFlags.forEach(flag => {
+        const key = `${flag.type}:${flag.message}`;
+        if (!analysis.flagFrequency[key]) {
+            analysis.flagFrequency[key] = {
+                count: 0,
+                severity: flag.severity,
+                type: flag.type,
+                message: flag.message
+            };
+        }
+        analysis.flagFrequency[key].count++;
+    });
+    
+    // Calculate consistency metrics
+    analysis.consistencyMetrics = {
+        locationConsistent: analysis.locationVariance.latitude?.variance < 0.0001 &&
+                           analysis.locationVariance.longitude?.variance < 0.0001,
+        scoreStable: Object.values(analysis.scoreStatistics).every(stat => 
+            stat.variance < 100
+        ),
+        flagsConsistent: Object.values(analysis.flagFrequency).every(flag =>
+            flag.count === sessions.length || flag.count === 0
+        )
+    };
+    
+    return analysis;
+}
+
+// Helper function to calculate variance
+function calculateVariance(numbers) {
+    if (numbers.length === 0) return 0;
+    const mean = numbers.reduce((a, b) => a + b, 0) / numbers.length;
+    const squaredDiffs = numbers.map(n => Math.pow(n - mean, 2));
+    return squaredDiffs.reduce((a, b) => a + b, 0) / numbers.length;
+}
 
 // ==================== Utility Functions ====================
 
@@ -410,10 +776,17 @@ async function verifyLocation(data) {
         score -= 20;
     }
 
+    // Check for suspicious patterns
+    const thresholds = getThresholds();
+    
     // Check accuracy
-    if (accuracy > 1000) {
-        flags.push({ type: 'warning', message: 'Low location accuracy' });
-        score -= 15;
+    if (accuracy > thresholds.location.accuracy.low) {
+        flags.push({
+            type: 'warning',
+            message: 'Low location accuracy',
+            explanation: `Accuracy of ${accuracy}m is above the ${thresholds.location.accuracy.low}m threshold`
+        });
+        score -= 30;
     }
 
     // Check timestamp freshness
@@ -462,10 +835,10 @@ async function verifyLocation(data) {
         }
     }
 
-    // Determine status
+    // Determine status based on score
     let status = 'authentic';
-    if (score < 60) status = 'likely_spoofed';
-    else if (score < 80) status = 'suspicious';
+    if (score < thresholds.location.score.likelySpoofed) status = 'likely_spoofed';
+    else if (score < thresholds.location.score.suspicious) status = 'suspicious';
 
     return {
         status,
@@ -481,67 +854,12 @@ async function verifyLocation(data) {
     };
 }
 
-function analyzeEnvironment(data) {
-    const flags = [];
-    let score = 100;
-    let environmentType = 'local_desktop';
-
-    // Check screen resolution
-    if (data.screenResolution) {
-        const { width, height } = data.screenResolution;
-        const ratio = width / height;
-        const commonRatios = [16/9, 16/10, 4/3, 21/9];
-        const isCommon = commonRatios.some(r => Math.abs(ratio - r) < 0.01);
-        
-        if (!isCommon) {
-            flags.push({ type: 'warning', message: 'Unusual screen aspect ratio' });
-            score -= 20;
-        }
-    }
-
-    // Check color depth
-    if (data.colorDepth < 24) {
-        flags.push({ type: 'warning', message: 'Low color depth (possible RDP)' });
-        score -= 25;
-    }
-
-    // Check WebGL renderer
-    if (data.webglRenderer) {
-        const renderer = data.webglRenderer.toLowerCase();
-        if (renderer.includes('vmware') || renderer.includes('virtualbox') || 
-            renderer.includes('microsoft basic') || renderer.includes('llvmpipe')) {
-            flags.push({ type: 'critical', message: 'Virtual display adapter detected' });
-            score -= 40;
-            environmentType = 'virtual_machine';
-        }
-    }
-
-    // Check touch support anomalies
-    if (data.touchSupport === false && data.platform && data.platform.includes('Android')) {
-        flags.push({ type: 'warning', message: 'Android device without touch support' });
-        score -= 30;
-    }
-
-    // Determine environment type
-    if (score < 50) {
-        environmentType = 'remote_desktop';
-    } else if (score < 75) {
-        environmentType = 'possibly_remote';
-    }
-
-    return {
-        environmentType,
-        score,
-        flags,
-        details: {
-            screenResolution: data.screenResolution,
-            colorDepth: data.colorDepth,
-            webglRenderer: data.webglRenderer,
-            platform: data.platform,
-            timezone: data.timezone,
-            language: data.language
-        }
-    };
+function getTimezoneFromCoordinates(lat, lon) {
+    // Simplified timezone estimation
+    // In production, use a proper timezone API or library
+    const longitude = parseFloat(lon);
+    const timezoneOffset = Math.round(longitude / 15);
+    return `UTC${timezoneOffset >= 0 ? '+' : ''}${timezoneOffset}`;
 }
 
 function calculateVPNProbability(req) {
@@ -572,16 +890,53 @@ function calculateVPNProbability(req) {
     return Math.min(probability, 100);
 }
 
-function getTimezoneFromCoordinates(lat, lon) {
-    // Simplified timezone estimation
-    // In production, use a proper timezone API or library
-    const longitude = parseFloat(lon);
-    const timezoneOffset = Math.round(longitude / 15);
-    return `UTC${timezoneOffset >= 0 ? '+' : ''}${timezoneOffset}`;
-}
-
 function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
+
+// Get current thresholds
+router.get('/thresholds', (req, res) => {
+    const thresholds = getThresholds();
+    res.json(thresholds);
+});
+
+// Update thresholds (admin only - add authentication in production)
+router.put('/thresholds', (req, res) => {
+    try {
+        const { reloadThresholds } = require('./threshold-config');
+        const fs = require('fs');
+        const path = require('path');
+        
+        // Validate the threshold structure
+        const newThresholds = req.body;
+        
+        // Basic validation
+        if (!newThresholds.location || !newThresholds.environment || !newThresholds.vpn) {
+            return res.status(400).json({ 
+                error: 'Invalid threshold structure',
+                message: 'Thresholds must include location, environment, and vpn sections'
+            });
+        }
+        
+        // Write to file
+        const thresholdsPath = path.join(__dirname, '..', 'thresholds.json');
+        fs.writeFileSync(thresholdsPath, JSON.stringify(newThresholds, null, 2));
+        
+        // Reload thresholds in memory
+        reloadThresholds();
+        
+        res.json({ 
+            success: true, 
+            message: 'Thresholds updated successfully',
+            thresholds: getThresholds()
+        });
+    } catch (error) {
+        console.error('Error updating thresholds:', error);
+        res.status(500).json({ 
+            error: 'Failed to update thresholds',
+            message: error.message
+        });
+    }
+});
 
 module.exports = router; 

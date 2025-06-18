@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { getThresholds } = require('./threshold-config');
 
 // VPN Detection Services Configuration
 const VPN_DETECTION_SERVICES = {
@@ -121,11 +122,13 @@ async function detectVPN(ip) {
         }
     });
     
-    // Calculate confidence
-    if (totalChecks > 0) {
-        results.confidence = (vpnDetections / totalChecks) * 100;
-        results.isVPN = results.confidence >= 50; // VPN if 50% or more services detect it
-    }
+    const thresholds = getThresholds();
+    
+    // Calculate confidence based on how many services detected VPN
+    results.confidence = Math.round((vpnDetections / totalChecks) * 100);
+    
+    // Consider it a VPN if confidence meets threshold
+    results.isVPN = results.confidence >= thresholds.vpn.confidence.detected;
     
     results.details = {
         totalChecks,

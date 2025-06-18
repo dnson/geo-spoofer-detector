@@ -1,6 +1,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { QdrantClient } = require('@qdrant/js-client-rest');
 const crypto = require('crypto');
+const { getThresholds } = require('./threshold-config');
 
 // Initialize clients
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -85,12 +86,14 @@ function generateSessionFingerprint(detectionData) {
 function calculateOverallRisk(detectionResults) {
     if (!detectionResults) return 'unknown';
     
+    const thresholds = getThresholds();
+    
     const locationScore = detectionResults.locationScore || 100;
     const environmentScore = detectionResults.environmentScore || 100;
     const avgScore = (locationScore + environmentScore) / 2;
     
-    if (avgScore < 40) return 'high';
-    if (avgScore < 70) return 'medium';
+    if (avgScore < thresholds.riskAssessment.averageScore.high) return 'high';
+    if (avgScore < thresholds.riskAssessment.averageScore.medium) return 'medium';
     return 'low';
 }
 
@@ -324,41 +327,44 @@ Format your response as JSON with the following structure:
  */
 async function evaluateLite(fingerprint, similarSessions) {
     try {
+        const thresholds = getThresholds();
+        const patterns = thresholds.patternAnalysis;
+        
         // Calculate risk based on fingerprint data
         let riskScore = 0;
         let riskFactors = [];
-        let patterns = [];
+        let riskPatterns = [];
         
         // Check location indicators
         if (fingerprint.location.vpnDetected) {
-            riskScore += 30;
+            riskScore += patterns.vpnRiskBonus;
             riskFactors.push('VPN/Proxy detected');
-            patterns.push('Network anonymization tool usage');
+            riskPatterns.push('Network anonymization tool usage');
         }
         
-        if (fingerprint.location.accuracy > 1000) {
-            riskScore += 15;
+        if (fingerprint.location.accuracy > thresholds.location.accuracy.low) {
+            riskScore += patterns.lowAccuracyBonus;
             riskFactors.push('Low GPS accuracy');
         }
         
-        if (fingerprint.location.responseTime && fingerprint.location.responseTime < 10) {
-            riskScore += 20;
+        if (fingerprint.location.responseTime && fingerprint.location.responseTime < thresholds.location.responseTime.suspicious) {
+            riskScore += patterns.fastResponseBonus;
             riskFactors.push('Suspiciously fast location response');
-            patterns.push('Possible browser extension spoofing');
+            riskPatterns.push('Possible browser extension spoofing');
         }
         
         // Check environment indicators
         const gpu = fingerprint.environment.gpu?.toLowerCase() || '';
         if (gpu.includes('vmware') || gpu.includes('virtualbox') || gpu.includes('microsoft basic')) {
-            riskScore += 25;
+            riskScore += patterns.vmDetectionBonus;
             riskFactors.push('Virtual machine detected');
-            patterns.push('Virtualized environment');
+            riskPatterns.push('Virtualized environment');
         }
         
-        if (fingerprint.environment.colorDepth < 24) {
-            riskScore += 15;
+        if (fingerprint.environment.colorDepth < thresholds.environment.colorDepth.rdpIndicator) {
+            riskScore += patterns.lowColorDepthBonus;
             riskFactors.push('Low color depth (possible RDP)');
-            patterns.push('Remote desktop connection');
+            riskPatterns.push('Remote desktop connection');
         }
         
         // Analyze similar sessions
@@ -371,21 +377,21 @@ async function evaluateLite(fingerprint, similarSessions) {
             const avgSimilarity = similarSessions.reduce((acc, s) => acc + s.score, 0) / similarSessions.length;
             
             if (highRiskSimilar > similarSessions.length / 2) {
-                riskScore += 20;
+                riskScore += patterns.highRiskSimilarBonus;
                 similarityInsights = `${highRiskSimilar} out of ${similarSessions.length} similar sessions were high risk`;
-                patterns.push('Pattern matches known spoofing attempts');
+                riskPatterns.push('Pattern matches known spoofing attempts');
             }
             
-            if (avgSimilarity > 0.9) {
-                patterns.push('Very high similarity to previous sessions');
+            if (avgSimilarity > patterns.similarityThreshold) {
+                riskPatterns.push('Very high similarity to previous sessions');
                 similarityInsights += `. Average similarity: ${(avgSimilarity * 100).toFixed(1)}%`;
             }
         }
         
         // Determine risk level
         let riskLevel = 'LOW';
-        if (riskScore >= 60) riskLevel = 'HIGH';
-        else if (riskScore >= 30) riskLevel = 'MEDIUM';
+        if (riskScore >= thresholds.riskAssessment.riskScore.high) riskLevel = 'HIGH';
+        else if (riskScore >= thresholds.riskAssessment.riskScore.medium) riskLevel = 'MEDIUM';
         
         // Generate recommendations based on risk
         const recommendations = [];
@@ -420,7 +426,7 @@ async function evaluateLite(fingerprint, similarSessions) {
             confidence: Math.min(90, 50 + (riskFactors.length * 10)),
             explanation: aiInsight,
             riskFactors: riskFactors,
-            patterns: patterns,
+            patterns: riskPatterns,
             recommendations: recommendations,
             similarityInsights: similarityInsights,
             processingTime: 'fast'
