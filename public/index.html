@@ -727,11 +727,14 @@
                 <div class="result-card" style="grid-column: 1 / -1; display: none;" id="patternAnalysisCard">
                     <div class="result-header">
                         <span class="result-title">🔬 Pattern Analysis</span>
-                        <button class="toggle-all-btn" id="runPatternAnalysis">Run Analysis</button>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="toggle-all-btn" id="runLiteAnalysis" style="background: linear-gradient(45deg, #059669, #10b981);">Lite Analysis</button>
+                            <button class="toggle-all-btn" id="runPatternAnalysis">Full Analysis</button>
+                        </div>
                     </div>
                     <div class="detection-details" id="patternAnalysisDetails">
                         <div id="patternAnalysisContent">
-                            <p style="text-align: center; opacity: 0.7;">Click "Run Analysis" to find similar sessions and get AI evaluation</p>
+                            <p style="text-align: center; opacity: 0.7;">Choose analysis type: <strong>Lite</strong> for quick results or <strong>Full</strong> for comprehensive AI evaluation</p>
                         </div>
                     </div>
                 </div>
@@ -1719,11 +1722,32 @@
                     html += `<p><strong>Risk Level:</strong> <span class="status-badge ${getRiskClass(evaluation.riskAssessment)}">${evaluation.riskAssessment}</span></p>`;
                 }
                 
+                if (evaluation.confidence) {
+                    html += `<p><strong>Confidence:</strong> ${evaluation.confidence}%</p>`;
+                }
+                
+                if (evaluation.riskScore !== undefined) {
+                    html += `<p><strong>Risk Score:</strong> ${evaluation.riskScore}/100</p>`;
+                }
+                
+                if (evaluation.processingTime) {
+                    html += `<p style="font-size: 0.85em; opacity: 0.7;">Processing time: ${evaluation.processingTime}</p>`;
+                }
+                
                 if (evaluation.explanation) {
                     html += `<p style="margin: 10px 0;">${evaluation.explanation}</p>`;
                 }
                 
-                if (evaluation.patterns) {
+                if (evaluation.riskFactors && evaluation.riskFactors.length > 0) {
+                    html += '<p><strong>Risk Factors:</strong></p>';
+                    html += '<ul style="margin-left: 20px;">';
+                    evaluation.riskFactors.forEach(factor => {
+                        html += `<li>${factor}</li>`;
+                    });
+                    html += '</ul>';
+                }
+                
+                if (evaluation.patterns && evaluation.patterns.length > 0) {
                     html += '<p><strong>Patterns Detected:</strong></p>';
                     html += '<ul style="margin-left: 20px;">';
                     evaluation.patterns.forEach(pattern => {
@@ -1732,13 +1756,54 @@
                     html += '</ul>';
                 }
                 
-                if (evaluation.recommendations) {
+                if (evaluation.technicalIndicators) {
+                    html += '<p><strong>Technical Indicators:</strong></p>';
+                    if (evaluation.technicalIndicators.location && evaluation.technicalIndicators.location.length > 0) {
+                        html += '<p style="margin-left: 20px;"><em>Location:</em></p>';
+                        html += '<ul style="margin-left: 40px;">';
+                        evaluation.technicalIndicators.location.forEach(indicator => {
+                            html += `<li>${indicator}</li>`;
+                        });
+                        html += '</ul>';
+                    }
+                    if (evaluation.technicalIndicators.environment && evaluation.technicalIndicators.environment.length > 0) {
+                        html += '<p style="margin-left: 20px;"><em>Environment:</em></p>';
+                        html += '<ul style="margin-left: 40px;">';
+                        evaluation.technicalIndicators.environment.forEach(indicator => {
+                            html += `<li>${indicator}</li>`;
+                        });
+                        html += '</ul>';
+                    }
+                    if (evaluation.technicalIndicators.network && evaluation.technicalIndicators.network.length > 0) {
+                        html += '<p style="margin-left: 20px;"><em>Network:</em></p>';
+                        html += '<ul style="margin-left: 40px;">';
+                        evaluation.technicalIndicators.network.forEach(indicator => {
+                            html += `<li>${indicator}</li>`;
+                        });
+                        html += '</ul>';
+                    }
+                }
+                
+                if (evaluation.spoofingTechniques && evaluation.spoofingTechniques.length > 0) {
+                    html += '<p><strong>Spoofing Techniques Detected:</strong></p>';
+                    html += '<ul style="margin-left: 20px;">';
+                    evaluation.spoofingTechniques.forEach(technique => {
+                        html += `<li>${technique}</li>`;
+                    });
+                    html += '</ul>';
+                }
+                
+                if (evaluation.recommendations && evaluation.recommendations.length > 0) {
                     html += '<p><strong>Recommendations:</strong></p>';
                     html += '<ul style="margin-left: 20px;">';
                     evaluation.recommendations.forEach(rec => {
                         html += `<li>${rec}</li>`;
                     });
                     html += '</ul>';
+                }
+                
+                if (evaluation.similarityInsights) {
+                    html += `<p><strong>Similar Sessions:</strong> ${evaluation.similarityInsights}</p>`;
                 }
                 
                 html += '</div>';
@@ -1753,10 +1818,11 @@
                     const payload = session.payload || session;
                     html += `<div class="similar-session" style="background: rgba(255,255,255,0.05); padding: 10px; margin: 10px 0; border-radius: 8px;">`;
                     html += `<p><strong>Session ${idx + 1}</strong> - Similarity: ${(session.score * 100).toFixed(1)}%</p>`;
-                    html += `<p style="font-size: 0.85em; opacity: 0.8;">Risk: ${payload.summary?.overallRisk || 'Unknown'}</p>`;
+                    html += `<p style="font-size: 0.85em; opacity: 0.8;">Risk: ${payload.summary?.overallRisk || session.risk || 'Unknown'}</p>`;
                     
-                    if (payload.summary?.spoofingIndicators?.length > 0) {
-                        html += `<p style="font-size: 0.85em; opacity: 0.8;">Indicators: ${payload.summary.spoofingIndicators.join(', ')}</p>`;
+                    const indicators = payload.summary?.spoofingIndicators || session.indicators || [];
+                    if (indicators.length > 0) {
+                        html += `<p style="font-size: 0.85em; opacity: 0.8;">Indicators: ${indicators.join(', ')}</p>`;
                     }
                     
                     html += '</div>';
@@ -1840,9 +1906,79 @@
                         '<p style="color: #ef4444;">Error running pattern analysis. Make sure Gemini API key and Qdrant are configured.</p>';
                 } finally {
                     this.disabled = false;
-                    this.textContent = 'Run Analysis';
+                    this.textContent = 'Full Analysis';
                 }
             });
+        }
+        
+        // Lite analysis button handler
+        const liteAnalysisBtn = document.getElementById('runLiteAnalysis');
+        if (liteAnalysisBtn) {
+            liteAnalysisBtn.addEventListener('click', async function() {
+                this.disabled = true;
+                this.textContent = 'Analyzing...';
+                
+                try {
+                    // Prepare session data
+                    const sessionData = {
+                        location: window.detectionState.location,
+                        environment: {
+                            screenResolution: {
+                                width: window.screen.width,
+                                height: window.screen.height
+                            },
+                            colorDepth: window.screen.colorDepth,
+                            touchSupport: 'ontouchstart' in window,
+                            webglRenderer: await getWebGLRenderer(),
+                            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                            language: navigator.language,
+                            platform: navigator.platform
+                        },
+                        detectionResults: {
+                            locationScore: calculateLocationScore(),
+                            environmentScore: calculateEnvironmentScore(),
+                            locationFlags: window.detectionState.locationFlags,
+                            environmentFlags: window.detectionState.environmentFlags
+                        }
+                    };
+                    
+                    // Call lite analysis endpoint
+                    const response = await fetch('/api/session/analyze-lite', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sessionData })
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        window.showPatternAnalysisUI(result.evaluation, result.similarSessions);
+                    } else {
+                        throw new Error('Failed to perform lite analysis');
+                    }
+                } catch (error) {
+                    console.error('Lite analysis error:', error);
+                    document.getElementById('patternAnalysisContent').innerHTML = 
+                        '<p style="color: #ef4444;">Error running lite analysis. Please try again.</p>';
+                } finally {
+                    this.disabled = false;
+                    this.textContent = 'Lite Analysis';
+                }
+            });
+        }
+        
+        // Helper function to get WebGL renderer info
+        async function getWebGLRenderer() {
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (gl) {
+                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    if (debugInfo) {
+                        return gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                    }
+                }
+            } catch (e) {}
+            return 'Unknown';
         }
         
         // Helper function to calculate scores

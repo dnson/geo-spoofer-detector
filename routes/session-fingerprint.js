@@ -33,7 +33,10 @@ function generateSessionFingerprint(detectionData) {
         
         // Location characteristics
         location: {
-            coordinates: location?.coordinates || null,
+            coordinates: location?.coordinates || (location?.latitude && location?.longitude ? {
+                latitude: location.latitude,
+                longitude: location.longitude
+            } : null),
             accuracy: location?.accuracy || null,
             responseTime: location?.responseTime || null,
             flags: location?.flags || [],
@@ -240,7 +243,7 @@ async function evaluateSimilarity(currentSession, similarSessions) {
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
         
         const prompt = `
-Analyze the following detection session and compare it with similar sessions found in the database.
+You are a security analyst specializing in location spoofing and remote access detection. Analyze the following detection session and compare it with similar sessions from our database.
 
 Current Session:
 ${JSON.stringify(currentSession, null, 2)}
@@ -251,28 +254,188 @@ Session ${i + 1} (Similarity Score: ${s.score}):
 ${JSON.stringify(s.payload, null, 2)}
 `).join('\n')}
 
-Please provide:
-1. A risk assessment (High/Medium/Low) with explanation
-2. Identified patterns across similar sessions
-3. Specific spoofing techniques detected
-4. Recommendations for action
+Provide a comprehensive analysis including:
+1. Risk Assessment: Determine if this is HIGH, MEDIUM, or LOW risk based on:
+   - Severity of spoofing indicators
+   - Consistency with similar sessions
+   - Likelihood of genuine vs. spoofed location
 
-Format your response as JSON.
+2. Pattern Analysis: Identify specific patterns such as:
+   - Common spoofing techniques (VPN, browser extensions, developer tools)
+   - Environmental inconsistencies (virtual machines, remote desktop)
+   - Behavioral anomalies compared to legitimate users
+
+3. Technical Indicators: Detail specific technical evidence:
+   - GPS anomalies (speed of response, accuracy issues)
+   - Network indicators (multiple IPs, VPN signatures)
+   - Hardware/software mismatches
+
+4. Confidence Score: Rate your confidence in the assessment (0-100%)
+
+5. Actionable Recommendations: Provide specific actions such as:
+   - Additional verification steps needed
+   - Security measures to implement
+   - User experience considerations
+
+Format your response as JSON with the following structure:
+{
+  "riskAssessment": "HIGH/MEDIUM/LOW",
+  "confidence": 85,
+  "explanation": "Brief explanation of the risk assessment",
+  "patterns": ["pattern1", "pattern2"],
+  "technicalIndicators": {
+    "location": ["indicator1", "indicator2"],
+    "environment": ["indicator1", "indicator2"],
+    "network": ["indicator1", "indicator2"]
+  },
+  "spoofingTechniques": ["technique1", "technique2"],
+  "recommendations": ["recommendation1", "recommendation2"],
+  "similarityInsights": "How this session compares to similar ones"
+}
 `;
 
         const result = await model.generateContent(prompt);
         const response = result.response;
         const text = response.text();
         
-        // Try to parse as JSON, fallback to text
+        // Try to parse as JSON, fallback to structured response
         try {
             return JSON.parse(text);
         } catch {
-            return { analysis: text };
+            // If JSON parsing fails, create structured response from text
+            return {
+                riskAssessment: "MEDIUM",
+                confidence: 70,
+                explanation: text,
+                patterns: ["Unable to parse detailed patterns"],
+                recommendations: ["Review raw analysis text for details"]
+            };
         }
     } catch (error) {
         console.error('Error evaluating with LLM:', error);
         throw error;
+    }
+}
+
+/**
+ * Lite evaluation - faster analysis using pattern matching and embeddings
+ */
+async function evaluateLite(fingerprint, similarSessions) {
+    try {
+        // Calculate risk based on fingerprint data
+        let riskScore = 0;
+        let riskFactors = [];
+        let patterns = [];
+        
+        // Check location indicators
+        if (fingerprint.location.vpnDetected) {
+            riskScore += 30;
+            riskFactors.push('VPN/Proxy detected');
+            patterns.push('Network anonymization tool usage');
+        }
+        
+        if (fingerprint.location.accuracy > 1000) {
+            riskScore += 15;
+            riskFactors.push('Low GPS accuracy');
+        }
+        
+        if (fingerprint.location.responseTime && fingerprint.location.responseTime < 10) {
+            riskScore += 20;
+            riskFactors.push('Suspiciously fast location response');
+            patterns.push('Possible browser extension spoofing');
+        }
+        
+        // Check environment indicators
+        const gpu = fingerprint.environment.gpu?.toLowerCase() || '';
+        if (gpu.includes('vmware') || gpu.includes('virtualbox') || gpu.includes('microsoft basic')) {
+            riskScore += 25;
+            riskFactors.push('Virtual machine detected');
+            patterns.push('Virtualized environment');
+        }
+        
+        if (fingerprint.environment.colorDepth < 24) {
+            riskScore += 15;
+            riskFactors.push('Low color depth (possible RDP)');
+            patterns.push('Remote desktop connection');
+        }
+        
+        // Analyze similar sessions
+        let similarityInsights = '';
+        if (similarSessions.length > 0) {
+            const highRiskSimilar = similarSessions.filter(s => 
+                s.payload?.summary?.overallRisk === 'high'
+            ).length;
+            
+            const avgSimilarity = similarSessions.reduce((acc, s) => acc + s.score, 0) / similarSessions.length;
+            
+            if (highRiskSimilar > similarSessions.length / 2) {
+                riskScore += 20;
+                similarityInsights = `${highRiskSimilar} out of ${similarSessions.length} similar sessions were high risk`;
+                patterns.push('Pattern matches known spoofing attempts');
+            }
+            
+            if (avgSimilarity > 0.9) {
+                patterns.push('Very high similarity to previous sessions');
+                similarityInsights += `. Average similarity: ${(avgSimilarity * 100).toFixed(1)}%`;
+            }
+        }
+        
+        // Determine risk level
+        let riskLevel = 'LOW';
+        if (riskScore >= 60) riskLevel = 'HIGH';
+        else if (riskScore >= 30) riskLevel = 'MEDIUM';
+        
+        // Generate recommendations based on risk
+        const recommendations = [];
+        if (riskLevel === 'HIGH') {
+            recommendations.push('Require additional authentication');
+            recommendations.push('Flag for manual review');
+            recommendations.push('Consider blocking high-risk actions');
+        } else if (riskLevel === 'MEDIUM') {
+            recommendations.push('Monitor user behavior closely');
+            recommendations.push('Enable enhanced logging');
+            recommendations.push('Consider step-up authentication for sensitive actions');
+        } else {
+            recommendations.push('Standard security measures sufficient');
+            recommendations.push('Continue normal monitoring');
+        }
+        
+        // Use Gemini for quick insight if available
+        let aiInsight = '';
+        try {
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+            const quickPrompt = `In one sentence, summarize the security risk for a user with: ${riskFactors.join(', ')}`;
+            const result = await model.generateContent(quickPrompt);
+            aiInsight = result.response.text().trim();
+        } catch (error) {
+            console.error('Error getting AI insight:', error);
+            aiInsight = `Detected ${riskFactors.length} risk factors indicating ${riskLevel.toLowerCase()} probability of location spoofing`;
+        }
+        
+        return {
+            riskAssessment: riskLevel,
+            riskScore: riskScore,
+            confidence: Math.min(90, 50 + (riskFactors.length * 10)),
+            explanation: aiInsight,
+            riskFactors: riskFactors,
+            patterns: patterns,
+            recommendations: recommendations,
+            similarityInsights: similarityInsights,
+            processingTime: 'fast'
+        };
+        
+    } catch (error) {
+        console.error('Error in lite evaluation:', error);
+        return {
+            riskAssessment: 'UNKNOWN',
+            riskScore: 0,
+            confidence: 0,
+            explanation: 'Error performing lite analysis',
+            riskFactors: [],
+            patterns: [],
+            recommendations: ['Retry analysis or use full evaluation'],
+            processingTime: 'error'
+        };
     }
 }
 
@@ -283,5 +446,6 @@ module.exports = {
     initializeQdrantCollection,
     storeSessionFingerprint,
     findSimilarSessions,
-    evaluateSimilarity
+    evaluateSimilarity,
+    evaluateLite
 }; 

@@ -308,6 +308,54 @@ router.post('/session/evaluate', async (req, res) => {
     }
 });
 
+// Lite analysis endpoint - faster evaluation with embeddings
+router.post('/session/analyze-lite', async (req, res) => {
+    try {
+        const { sessionData } = req.body;
+        
+        if (!sessionData) {
+            return res.status(400).json({ error: 'Session data required' });
+        }
+        
+        // Generate detection data
+        const detectionData = {
+            location: sessionData.location,
+            environment: sessionData.environment,
+            network: sessionData.network,
+            timestamp: sessionData.timestamp,
+            userAgent: req.headers['user-agent'],
+            clientIp: getClientIp(req),
+            detectionResults: sessionData.detectionResults
+        };
+        
+        // Generate fingerprint and embedding
+        const fingerprint = generateSessionFingerprint(detectionData);
+        const fingerprintText = fingerprintToText(fingerprint);
+        const embedding = await generateEmbedding(fingerprintText);
+        
+        // Find similar sessions (limit to 3 for speed)
+        const similarSessions = await findSimilarSessions(embedding, 3);
+        
+        // Perform lite evaluation
+        const { evaluateLite } = require('./session-fingerprint');
+        const liteEvaluation = await evaluateLite(fingerprint, similarSessions);
+        
+        res.json({
+            success: true,
+            fingerprint: fingerprint,
+            evaluation: liteEvaluation,
+            similarSessions: similarSessions.map(s => ({
+                score: s.score,
+                risk: s.payload?.summary?.overallRisk,
+                indicators: s.payload?.summary?.spoofingIndicators
+            }))
+        });
+    } catch (error) {
+        console.error('Lite analysis error:', error);
+        res.status(500).json({ error: 'Failed to perform lite analysis' });
+    }
+});
+
 // Get session analysis summary
 router.get('/session/analysis/:sessionId', async (req, res) => {
     try {

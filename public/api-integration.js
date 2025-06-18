@@ -159,11 +159,17 @@ async function detectLocationWithAPI() {
                 
                 // Store location locally
                 window.detectionState.location = {
+                    coordinates: {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude
+                    },
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude,
                     accuracy: position.coords.accuracy,
                     timestamp: position.timestamp
                 };
+
+                console.log('Location stored in detectionState:', window.detectionState.location);
                 
                 console.log('Location stored in detectionState:', window.detectionState.location);
                 
