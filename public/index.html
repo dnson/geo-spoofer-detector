@@ -309,6 +309,9 @@
         </div>
     </div>
 
+    <!-- Include API integration first -->
+    <script src="/api-integration.js"></script>
+    
     <script>
         // Create animated particles
         function createParticles() {
@@ -332,6 +335,9 @@
             environmentFlags: [],
             locationFlags: []
         };
+
+        // Make detectionState globally available for API integration
+        window.detectionState = detectionState;
 
         // Main detection function
         async function startDetection() {
@@ -466,6 +472,9 @@
             }, 1000);
         }
 
+        // Make function available globally for API integration
+        window.detectEnvironment = detectEnvironment;
+
         // Permission detection
         async function detectPermissions() {
             // Check geolocation permission
@@ -561,6 +570,9 @@
                 );
             });
         }
+
+        // Make function available globally for API integration
+        window.detectLocation = detectLocation;
 
         // Timing anomaly detection
         async function detectTimingAnomalies() {
@@ -743,6 +755,9 @@
                 environmentDetails.appendChild(item);
             }
         }
+
+        // Make function available globally for API integration
+        window.analyzeResults = analyzeResults;
 
         // Button ripple effect
         document.getElementById('locateBtn').addEventListener('click', function(e) {

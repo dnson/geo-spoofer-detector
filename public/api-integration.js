@@ -6,7 +6,7 @@
  */
 
 const API_BASE_URL = window.location.origin + '/api';
-const USE_API = false; // Set to true to use backend API
+const USE_API = true; // Set to true to use backend API
 
 class GeoSpoofAPI {
     constructor() {
@@ -113,12 +113,8 @@ const geoSpoofAPI = new GeoSpoofAPI();
  * Enhanced location detection with API integration
  */
 async function detectLocationWithAPI() {
-    if (!USE_API) {
-        return; // Use existing client-side detection
-    }
-
     if (!navigator.geolocation) {
-        detectionState.locationFlags.push({
+        window.detectionState.locationFlags.push({
             type: 'fail',
             message: 'Geolocation API not available'
         });
@@ -129,7 +125,7 @@ async function detectLocationWithAPI() {
         navigator.geolocation.getCurrentPosition(
             async (position) => {
                 // Store location locally
-                detectionState.location = {
+                window.detectionState.location = {
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude,
                     accuracy: position.coords.accuracy,
@@ -146,7 +142,7 @@ async function detectLocationWithAPI() {
 
                 if (verificationResult) {
                     // Use API results
-                    detectionState.locationFlags = verificationResult.flags || [];
+                    window.detectionState.locationFlags = verificationResult.flags || [];
                     
                     // Get additional metadata
                     const metadata = await geoSpoofAPI.getLocationMetadata(
@@ -155,14 +151,14 @@ async function detectLocationWithAPI() {
                     );
 
                     if (metadata) {
-                        detectionState.location.metadata = metadata;
+                        window.detectionState.location.metadata = metadata;
                     }
                 }
 
                 resolve();
             },
             (error) => {
-                detectionState.locationFlags.push({
+                window.detectionState.locationFlags.push({
                     type: 'fail',
                     message: `Location error: ${error.message}`
                 });
@@ -181,10 +177,6 @@ async function detectLocationWithAPI() {
  * Enhanced environment detection with API integration
  */
 async function detectEnvironmentWithAPI() {
-    if (!USE_API) {
-        return; // Use existing client-side detection
-    }
-
     // Collect environment data
     const environmentData = {
         screenResolution: {
@@ -214,8 +206,8 @@ async function detectEnvironmentWithAPI() {
     const analysisResult = await geoSpoofAPI.analyzeEnvironment(environmentData);
 
     if (analysisResult) {
-        detectionState.environmentFlags = analysisResult.flags || [];
-        detectionState.environmentType = analysisResult.environmentType;
+        window.detectionState.environmentFlags = analysisResult.flags || [];
+        window.detectionState.environmentType = analysisResult.environmentType;
     }
 }
 
@@ -223,15 +215,11 @@ async function detectEnvironmentWithAPI() {
  * Store results after detection completes
  */
 async function storeDetectionResultsAPI() {
-    if (!USE_API) {
-        return;
-    }
-
     const sessionId = generateSessionId();
     const results = {
-        location: detectionState.location,
-        locationFlags: detectionState.locationFlags,
-        environmentFlags: detectionState.environmentFlags,
+        location: window.detectionState.location,
+        locationFlags: window.detectionState.locationFlags,
+        environmentFlags: window.detectionState.environmentFlags,
         timestamp: new Date().toISOString()
     };
 
@@ -253,18 +241,36 @@ function generateSessionId() {
  * Override the original detection functions if API is enabled
  */
 if (USE_API) {
+    // Wait for DOM content to be loaded
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            setupAPIIntegration();
+        });
+    } else {
+        // DOM is already loaded
+        setupAPIIntegration();
+    }
+}
+
+function setupAPIIntegration() {
     console.log('API integration enabled');
     
     // Override the original detectLocation function
-    window.detectLocation = detectLocationWithAPI;
+    if (window.detectLocation) {
+        window.detectLocation = detectLocationWithAPI;
+    }
     
     // Override the original detectEnvironment function  
-    window.detectEnvironment = detectEnvironmentWithAPI;
+    if (window.detectEnvironment) {
+        window.detectEnvironment = detectEnvironmentWithAPI;
+    }
     
     // Add hook to store results after analysis
-    const originalAnalyzeResults = window.analyzeResults;
-    window.analyzeResults = function() {
-        originalAnalyzeResults();
-        storeDetectionResultsAPI();
-    };
+    if (window.analyzeResults) {
+        const originalAnalyzeResults = window.analyzeResults;
+        window.analyzeResults = function() {
+            originalAnalyzeResults();
+            storeDetectionResultsAPI();
+        };
+    }
 } 
