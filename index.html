@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location Authenticity & Environment Detector</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Animated background particles */
+        .particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            animation: float 20s infinite linear;
+        }
+
+        @keyframes float {
+            from {
+                transform: translateY(100vh) translateX(0);
+            }
+            to {
+                transform: translateY(-100px) translateX(100px);
+            }
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 600px;
+            width: 90%;
+            z-index: 10;
+            position: relative;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2em;
+            background: linear-gradient(45deg, #fff, #a8c0ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 30px;
+        }
+
+        .locate-btn {
+            width: 100%;
+            padding: 20px;
+            font-size: 1.2em;
+            font-weight: bold;
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 30px;
+        }
+
+        .locate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.5);
+        }
+
+        .locate-btn:active {
+            transform: translateY(0);
+        }
+
+        .locate-btn.scanning {
+            background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+            pointer-events: none;
+        }
+
+        .ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.5);
+            transform: scale(0);
+            animation: ripple 0.6s ease-out;
+        }
+
+        @keyframes ripple {
+            to {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+
+        .results {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .result-card::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .result-card:hover::before {
+            opacity: 1;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .result-title {
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-authentic {
+            background: rgba(52, 211, 153, 0.2);
+            color: #34d399;
+            border: 1px solid #34d399;
+        }
+
+        .status-suspicious {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+            border: 1px solid #fbbf24;
+        }
+
+        .status-spoofed {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid #ef4444;
+        }
+
+        .detection-details {
+            margin-top: 10px;
+            padding-left: 20px;
+        }
+
+        .detection-item {
+            margin: 8px 0;
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .indicator.pass {
+            background: #34d399;
+        }
+
+        .indicator.warning {
+            background: #fbbf24;
+        }
+
+        .indicator.fail {
+            background: #ef4444;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .coordinates {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 10px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            h1 {
+                font-size: 1.5em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="particles" id="particles"></div>
+    
+    <div class="container">
+        <h1>Location Authenticity Detector</h1>
+        <p class="subtitle">Verify genuine location & detect remote environments</p>
+        
+        <button class="locate-btn" id="locateBtn" onclick="startDetection()">
+            <span id="btnText">🔍 Locate Me</span>
+        </button>
+        
+        <div class="progress-bar" id="progressBar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        
+        <div class="results" id="results">
+            <div class="result-card">
+                <div class="result-header">
+                    <span class="result-title">📍 Location Authenticity</span>
+                    <span class="status-badge" id="locationStatus"></span>
+                </div>
+                <div class="detection-details" id="locationDetails"></div>
+                <div class="coordinates" id="coordinates"></div>
+            </div>
+            
+            <div class="result-card">
+                <div class="result-header">
+                    <span class="result-title">💻 Environment Type</span>
+                    <span class="status-badge" id="environmentStatus"></span>
+                </div>
+                <div class="detection-details" id="environmentDetails"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Create animated particles
+        function createParticles() {
+            const particlesContainer = document.getElementById('particles');
+            for (let i = 0; i < 50; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 20 + 's';
+                particle.style.animationDuration = (20 + Math.random() * 10) + 's';
+                particlesContainer.appendChild(particle);
+            }
+        }
+        createParticles();
+
+        // Detection state
+        let detectionState = {
+            location: null,
+            timestamps: [],
+            permissions: {},
+            environmentFlags: [],
+            locationFlags: []
+        };
+
+        // Main detection function
+        async function startDetection() {
+            const btn = document.getElementById('locateBtn');
+            const btnText = document.getElementById('btnText');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            const results = document.getElementById('results');
+            
+            // Reset state
+            detectionState = {
+                location: null,
+                timestamps: [],
+                permissions: {},
+                environmentFlags: [],
+                locationFlags: []
+            };
+            
+            // Update UI
+            btn.classList.add('scanning');
+            btnText.textContent = '🔄 Scanning...';
+            progressBar.style.display = 'block';
+            results.style.display = 'none';
+            
+            // Run detection phases
+            await updateProgress(10);
+            await detectEnvironment();
+            
+            await updateProgress(30);
+            await detectPermissions();
+            
+            await updateProgress(50);
+            await detectLocation();
+            
+            await updateProgress(70);
+            await detectTimingAnomalies();
+            
+            await updateProgress(90);
+            await detectBrowserInconsistencies();
+            
+            await updateProgress(100);
+            
+            // Analyze results
+            analyzeResults();
+            
+            // Show results
+            setTimeout(() => {
+                btn.classList.remove('scanning');
+                btnText.textContent = '🔍 Locate Me';
+                progressBar.style.display = 'none';
+                progressFill.style.width = '0%';
+                results.style.display = 'block';
+            }, 500);
+        }
+
+        // Progress animation
+        function updateProgress(percent) {
+            return new Promise(resolve => {
+                document.getElementById('progressFill').style.width = percent + '%';
+                setTimeout(resolve, 300);
+            });
+        }
+
+        // Environment detection
+        async function detectEnvironment() {
+            // Check for RDP/VNC indicators
+            if (navigator.maxTouchPoints === 0 && 'ontouchstart' in window) {
+                detectionState.environmentFlags.push({
+                    type: 'warning',
+                    message: 'Touch events without touch support'
+                });
+            }
+            
+            // Check screen resolution patterns
+            const screenRatio = window.screen.width / window.screen.height;
+            const commonRatios = [16/9, 16/10, 4/3, 21/9];
+            const isCommonRatio = commonRatios.some(ratio => 
+                Math.abs(screenRatio - ratio) < 0.01
+            );
+            
+            if (!isCommonRatio) {
+                detectionState.environmentFlags.push({
+                    type: 'warning',
+                    message: 'Unusual screen aspect ratio'
+                });
+            }
+            
+            // Check color depth
+            if (window.screen.colorDepth < 24) {
+                detectionState.environmentFlags.push({
+                    type: 'warning',
+                    message: 'Low color depth (possible RDP)'
+                });
+            }
+            
+            // Check for virtual display drivers
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (gl) {
+                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    if (debugInfo) {
+                        const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                        if (renderer.includes('VMware') || renderer.includes('VirtualBox') || 
+                            renderer.includes('Microsoft Basic Render') || renderer.includes('llvmpipe')) {
+                            detectionState.environmentFlags.push({
+                                type: 'fail',
+                                message: 'Virtual display adapter detected'
+                            });
+                        }
+                    }
+                }
+            } catch (e) {}
+            
+            // Check keyboard/mouse latency patterns
+            let lastEventTime = 0;
+            const checkLatency = (e) => {
+                const now = performance.now();
+                if (lastEventTime && (now - lastEventTime) < 1) {
+                    detectionState.environmentFlags.push({
+                        type: 'warning',
+                        message: 'Synthetic input detected'
+                    });
+                }
+                lastEventTime = now;
+            };
+            
+            // Monitor for a brief period
+            document.addEventListener('mousemove', checkLatency);
+            setTimeout(() => {
+                document.removeEventListener('mousemove', checkLatency);
+            }, 1000);
+        }
+
+        // Permission detection
+        async function detectPermissions() {
+            // Check geolocation permission
+            try {
+                const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+                detectionState.permissions.geolocation = permissionStatus.state;
+                
+                if (permissionStatus.state === 'denied') {
+                    detectionState.locationFlags.push({
+                        type: 'fail',
+                        message: 'Geolocation permission denied'
+                    });
+                }
+            } catch (e) {
+                detectionState.permissions.geolocation = 'unknown';
+            }
+        }
+
+        // Location detection with multiple verification steps
+        async function detectLocation() {
+            if (!navigator.geolocation) {
+                detectionState.locationFlags.push({
+                    type: 'fail',
+                    message: 'Geolocation API not available'
+                });
+                return;
+            }
+            
+            return new Promise((resolve) => {
+                const startTime = performance.now();
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const endTime = performance.now();
+                        const duration = endTime - startTime;
+                        
+                        detectionState.location = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy,
+                            timestamp: position.timestamp
+                        };
+                        
+                        // Check for suspiciously fast response
+                        if (duration < 10) {
+                            detectionState.locationFlags.push({
+                                type: 'warning',
+                                message: 'Location obtained suspiciously fast'
+                            });
+                        }
+                        
+                        // Check accuracy
+                        if (position.coords.accuracy > 1000) {
+                            detectionState.locationFlags.push({
+                                type: 'warning',
+                                message: 'Low location accuracy'
+                            });
+                        }
+                        
+                        // Check for common spoofing coordinates
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        
+                        if (lat === 0 && lon === 0) {
+                            detectionState.locationFlags.push({
+                                type: 'fail',
+                                message: 'Null Island coordinates detected'
+                            });
+                        }
+                        
+                        // Check for overly round numbers
+                        if (lat % 1 === 0 && lon % 1 === 0) {
+                            detectionState.locationFlags.push({
+                                type: 'warning',
+                                message: 'Suspiciously round coordinates'
+                            });
+                        }
+                        
+                        resolve();
+                    },
+                    (error) => {
+                        detectionState.locationFlags.push({
+                            type: 'fail',
+                            message: `Location error: ${error.message}`
+                        });
+                        resolve();
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            });
+        }
+
+        // Timing anomaly detection
+        async function detectTimingAnomalies() {
+            // Check system time consistency
+            const jsTime = Date.now();
+            const perfTime = performance.now();
+            
+            // Multiple timestamp collection
+            for (let i = 0; i < 5; i++) {
+                detectionState.timestamps.push({
+                    js: Date.now(),
+                    perf: performance.now()
+                });
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            // Check for time manipulation
+            let irregularities = 0;
+            for (let i = 1; i < detectionState.timestamps.length; i++) {
+                const jsDiff = detectionState.timestamps[i].js - detectionState.timestamps[i-1].js;
+                const perfDiff = detectionState.timestamps[i].perf - detectionState.timestamps[i-1].perf;
+                
+                if (Math.abs(jsDiff - perfDiff) > 10) {
+                    irregularities++;
+                }
+            }
+            
+            if (irregularities > 2) {
+                detectionState.environmentFlags.push({
+                    type: 'warning',
+                    message: 'Time flow irregularities detected'
+                });
+            }
+        }
+
+        // Browser consistency checks
+        async function detectBrowserInconsistencies() {
+            // Check for browser extension artifacts
+            try {
+                // Common VPN/proxy extension detection
+                const testUrls = [
+                    'chrome-extension://fake-extension-id/test.js',
+                    'moz-extension://fake-extension-id/test.js'
+                ];
+                
+                for (const url of testUrls) {
+                    try {
+                        await fetch(url, { mode: 'no-cors' });
+                    } catch (e) {
+                        // Expected to fail, but pattern can reveal extensions
+                    }
+                }
+            } catch (e) {}
+            
+            // Check WebRTC leak
+            try {
+                const pc = new RTCPeerConnection({
+                    iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
+                });
+                
+                pc.createDataChannel('');
+                pc.createOffer().then(offer => pc.setLocalDescription(offer));
+                
+                pc.onicecandidate = (ice) => {
+                    if (!ice || !ice.candidate || !ice.candidate.candidate) return;
+                    
+                    const candidate = ice.candidate.candidate;
+                    const ipRegex = /([0-9]{1,3}\.){3}[0-9]{1,3}/;
+                    const ips = candidate.match(ipRegex);
+                    
+                    if (ips && ips[0]) {
+                        // Check for VPN/proxy indicators
+                        if (ips[0].startsWith('10.') || ips[0].startsWith('172.') || ips[0].startsWith('192.168.')) {
+                            detectionState.locationFlags.push({
+                                type: 'warning',
+                                message: 'Private IP detected (possible VPN)'
+                            });
+                        }
+                    }
+                    
+                    pc.close();
+                };
+            } catch (e) {}
+            
+            // Check timezone consistency
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (detectionState.location) {
+                // This is a simplified check - in production, you'd use a timezone API
+                const expectedOffset = new Date().getTimezoneOffset();
+                // Add logic to verify timezone matches location
+            }
+        }
+
+        // Analyze all collected data
+        function analyzeResults() {
+            const locationDetails = document.getElementById('locationDetails');
+            const environmentDetails = document.getElementById('environmentDetails');
+            const locationStatus = document.getElementById('locationStatus');
+            const environmentStatus = document.getElementById('environmentStatus');
+            const coordinates = document.getElementById('coordinates');
+            
+            // Clear previous results
+            locationDetails.innerHTML = '';
+            environmentDetails.innerHTML = '';
+            
+            // Analyze location authenticity
+            let locationScore = 100;
+            let locationStatusText = 'Authentic';
+            let locationStatusClass = 'status-authentic';
+            
+            detectionState.locationFlags.forEach(flag => {
+                const item = document.createElement('div');
+                item.className = 'detection-item';
+                item.innerHTML = `<span class="indicator ${flag.type}"></span>${flag.message}`;
+                locationDetails.appendChild(item);
+                
+                if (flag.type === 'warning') locationScore -= 20;
+                if (flag.type === 'fail') locationScore -= 40;
+            });
+            
+            if (locationScore < 60) {
+                locationStatusText = 'Likely Spoofed';
+                locationStatusClass = 'status-spoofed';
+            } else if (locationScore < 80) {
+                locationStatusText = 'Suspicious';
+                locationStatusClass = 'status-suspicious';
+            }
+            
+            if (!detectionState.location) {
+                locationStatusText = 'Unable to Verify';
+                locationStatusClass = 'status-spoofed';
+            }
+            
+            locationStatus.textContent = locationStatusText;
+            locationStatus.className = `status-badge ${locationStatusClass}`;
+            
+            // Show coordinates if available
+            if (detectionState.location) {
+                coordinates.textContent = `Coordinates: ${detectionState.location.latitude.toFixed(6)}, ${detectionState.location.longitude.toFixed(6)} (±${Math.round(detectionState.location.accuracy)}m)`;
+            }
+            
+            // Analyze environment
+            let environmentScore = 100;
+            let environmentStatusText = 'Local Desktop';
+            let environmentStatusClass = 'status-authentic';
+            
+            detectionState.environmentFlags.forEach(flag => {
+                const item = document.createElement('div');
+                item.className = 'detection-item';
+                item.innerHTML = `<span class="indicator ${flag.type}"></span>${flag.message}`;
+                environmentDetails.appendChild(item);
+                
+                if (flag.type === 'warning') environmentScore -= 25;
+                if (flag.type === 'fail') environmentScore -= 50;
+            });
+            
+            if (environmentScore < 50) {
+                environmentStatusText = 'Remote Desktop';
+                environmentStatusClass = 'status-spoofed';
+            } else if (environmentScore < 75) {
+                environmentStatusText = 'Possibly Remote';
+                environmentStatusClass = 'status-suspicious';
+            }
+            
+            environmentStatus.textContent = environmentStatusText;
+            environmentStatus.className = `status-badge ${environmentStatusClass}`;
+            
+            // Add summary items if no issues found
+            if (detectionState.locationFlags.length === 0) {
+                const item = document.createElement('div');
+                item.className = 'detection-item';
+                item.innerHTML = '<span class="indicator pass"></span>All location checks passed';
+                locationDetails.appendChild(item);
+            }
+            
+            if (detectionState.environmentFlags.length === 0) {
+                const item = document.createElement('div');
+                item.className = 'detection-item';
+                item.innerHTML = '<span class="indicator pass"></span>No remote environment indicators';
+                environmentDetails.appendChild(item);
+            }
+        }
+
+        // Button ripple effect
+        document.getElementById('locateBtn').addEventListener('click', function(e) {
+            const ripple = document.createElement('span');
+            ripple.className = 'ripple';
+            const size = 40;
+            ripple.style.width = ripple.style.height = size + 'px';
+            ripple.style.left = (e.offsetX - size / 2) + 'px';
+            ripple.style.top = (e.offsetY - size / 2) + 'px';
+            this.appendChild(ripple);
+            setTimeout(() => ripple.remove(), 600);
+        });
+    </script>
+</body>
+</html>
