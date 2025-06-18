@@ -5,8 +5,13 @@
  * To use this, include it in the HTML file and set USE_API to true.
  */
 
+console.log('API Integration Module loading...');
+
 const API_BASE_URL = window.location.origin + '/api';
 const USE_API = true; // Set to true to use backend API
+
+console.log('API_BASE_URL:', API_BASE_URL);
+console.log('USE_API:', USE_API);
 
 class GeoSpoofAPI {
     constructor() {
@@ -17,6 +22,7 @@ class GeoSpoofAPI {
      * Verify location authenticity through the API
      */
     async verifyLocation(locationData) {
+        console.log('Making API call to /api/location/verify', locationData);
         try {
             const response = await fetch(`${this.baseUrl}/location/verify`, {
                 method: 'POST',
@@ -30,7 +36,9 @@ class GeoSpoofAPI {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            return await response.json();
+            const result = await response.json();
+            console.log('Location verify response:', result);
+            return result;
         } catch (error) {
             console.error('Location verification error:', error);
             return null;
@@ -61,6 +69,7 @@ class GeoSpoofAPI {
      * Analyze environment through the API
      */
     async analyzeEnvironment(environmentData) {
+        console.log('Making API call to /api/environment/analyze', environmentData);
         try {
             const response = await fetch(`${this.baseUrl}/environment/analyze`, {
                 method: 'POST',
@@ -74,7 +83,9 @@ class GeoSpoofAPI {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            return await response.json();
+            const result = await response.json();
+            console.log('Environment analyze response:', result);
+            return result;
         } catch (error) {
             console.error('Environment analysis error:', error);
             return null;
@@ -113,6 +124,8 @@ const geoSpoofAPI = new GeoSpoofAPI();
  * Enhanced location detection with API integration
  */
 async function detectLocationWithAPI() {
+    console.log('detectLocationWithAPI called');
+    
     if (!navigator.geolocation) {
         window.detectionState.locationFlags.push({
             type: 'fail',
@@ -177,6 +190,8 @@ async function detectLocationWithAPI() {
  * Enhanced environment detection with API integration
  */
 async function detectEnvironmentWithAPI() {
+    console.log('detectEnvironmentWithAPI called');
+    
     // Collect environment data
     const environmentData = {
         screenResolution: {
@@ -241,32 +256,31 @@ function generateSessionId() {
  * Override the original detection functions if API is enabled
  */
 if (USE_API) {
-    // Wait for DOM content to be loaded
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-            setupAPIIntegration();
-        });
-    } else {
-        // DOM is already loaded
-        setupAPIIntegration();
-    }
+    console.log('USE_API is true, setting up integration immediately');
+    setupAPIIntegration();
 }
 
 function setupAPIIntegration() {
-    console.log('API integration enabled');
+    console.log('Setting up API integration...');
+    console.log('window.detectLocation exists:', !!window.detectLocation);
+    console.log('window.detectEnvironment exists:', !!window.detectEnvironment);
+    console.log('window.analyzeResults exists:', !!window.analyzeResults);
     
     // Override the original detectLocation function
     if (window.detectLocation) {
+        console.log('Overriding detectLocation with API version');
         window.detectLocation = detectLocationWithAPI;
     }
     
     // Override the original detectEnvironment function  
     if (window.detectEnvironment) {
+        console.log('Overriding detectEnvironment with API version');
         window.detectEnvironment = detectEnvironmentWithAPI;
     }
     
     // Add hook to store results after analysis
     if (window.analyzeResults) {
+        console.log('Adding hook to analyzeResults');
         const originalAnalyzeResults = window.analyzeResults;
         window.analyzeResults = function() {
             originalAnalyzeResults();
