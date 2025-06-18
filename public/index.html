@@ -794,6 +794,18 @@
                         </div>
                     </div>
                 </div>
+                
+                <div class="result-card" style="grid-column: 1 / -1; display: none;" id="rulesCheckCard">
+                    <div class="result-header">
+                        <span class="result-title">📋 Rule-Based Checks</span>
+                        <span class="status-badge" id="rulesCheckStatus"></span>
+                    </div>
+                    <div class="detection-details" id="rulesCheckDetails">
+                        <div id="rulesCheckContent">
+                            <p style="text-align: center; opacity: 0.7;">Running rule-based validation checks...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -803,6 +815,9 @@
     
     <!-- Include API integration first -->
     <script src="/api-integration.js"></script>
+    
+    <!-- Session Rules Check -->
+    <script src="/session-rules-check.js"></script>
     
     <script>
         console.log('Main script starting...');
@@ -1084,6 +1099,9 @@
             
             // Analyze results
             analyzeResults();
+            
+            // Run rule-based checks
+            runRulesCheck();
             
             // Show results
             setTimeout(() => {
@@ -1766,6 +1784,89 @@
 
         // Make function available globally for API integration
         window.analyzeResults = analyzeResults;
+
+        // Run rule-based checks on session data
+        function runRulesCheck() {
+            if (!sessionData) {
+                console.log('No session data available for rules check');
+                return;
+            }
+            
+            // Show the rules check card
+            const rulesCard = document.getElementById('rulesCheckCard');
+            if (rulesCard) {
+                rulesCard.style.display = 'block';
+            }
+            
+            // Run the checks
+            const checkResults = window.SessionRulesCheck.runAllChecks({
+                multiDetectionSession: sessionData,
+                currentSession: sessionData
+            });
+            
+            // Update status badge
+            const statusEl = document.getElementById('rulesCheckStatus');
+            if (checkResults.hasIssues) {
+                statusEl.textContent = `${checkResults.summary.failedChecks} Issues Found`;
+                statusEl.className = 'status-badge status-spoofed';
+            } else {
+                statusEl.textContent = 'All Checks Passed';
+                statusEl.className = 'status-badge status-authentic';
+            }
+            
+            // Display results
+            const contentEl = document.getElementById('rulesCheckContent');
+            let html = '<div class="rules-check-results">';
+            
+            // Summary
+            html += '<h4 style="margin-bottom: 15px;">📊 Check Summary</h4>';
+            html += `<p><strong>Total Checks:</strong> ${checkResults.summary.totalChecks}</p>`;
+            html += `<p><strong>Passed:</strong> <span style="color: #34d399;">${checkResults.summary.passedChecks}</span></p>`;
+            html += `<p><strong>Failed:</strong> <span style="color: #ef4444;">${checkResults.summary.failedChecks}</span></p>`;
+            
+            // Failed checks details
+            if (checkResults.errorMessages.length > 0) {
+                html += '<h4 style="margin-top: 20px; margin-bottom: 15px;">⚠️ Issues Detected</h4>';
+                html += '<ul style="margin-left: 20px;">';
+                checkResults.errorMessages.forEach(message => {
+                    html += `<li class="detection-item"><span class="indicator fail"></span>${message}</li>`;
+                });
+                html += '</ul>';
+            }
+            
+            // Individual check results
+            html += '<h4 style="margin-top: 20px; margin-bottom: 15px;">📋 Individual Check Results</h4>';
+            html += '<div style="display: grid; gap: 10px;">';
+            
+            checkResults.results.forEach(result => {
+                const statusClass = result.result ? 'fail' : 'pass';
+                const statusIcon = result.result ? '✗' : '✓';
+                const bgColor = result.result ? 'rgba(239, 68, 68, 0.1)' : 'rgba(52, 211, 153, 0.1)';
+                
+                html += `<div style="background: ${bgColor}; padding: 10px; border-radius: 8px; display: flex; align-items: center; gap: 10px;">`;
+                html += `<span class="check-status ${statusClass}">${statusIcon}</span>`;
+                html += `<span style="flex: 1;">${formatCheckName(result.checkName)}</span>`;
+                if (result.message && result.result) {
+                    html += `<span style="font-size: 0.85em; opacity: 0.8;">${result.message}</span>`;
+                }
+                html += '</div>';
+            });
+            
+            html += '</div>';
+            html += '</div>';
+            
+            contentEl.innerHTML = html;
+        }
+        
+        // Helper function to format check names
+        function formatCheckName(name) {
+            // Convert camelCase to readable format
+            return name
+                .replace(/([A-Z])/g, ' $1')
+                .replace(/^check /, '')
+                .replace(/^./, str => str.toUpperCase())
+                .trim();
+        }
 
         // Button ripple effect
         document.getElementById('locateBtn').addEventListener('click', function(e) {
