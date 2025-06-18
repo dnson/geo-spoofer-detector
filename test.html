@@ -212,36 +212,12 @@
         }
 
         .detection-item {
-            margin: 12px 0;
+            margin: 8px 0;
             font-size: 0.9em;
             color: rgba(255, 255, 255, 0.8);
             display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            flex-direction: column;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .detection-item:last-child {
-            border-bottom: none;
-        }
-
-        .detection-item > div:first-child {
-            display: flex;
             align-items: center;
             gap: 8px;
-            font-weight: 500;
-        }
-
-        .detection-explanation {
-            margin-left: 28px;
-            font-size: 0.85em;
-            opacity: 0.8;
-            margin-top: 4px;
-            line-height: 1.5;
-            color: rgba(255, 255, 255, 0.6);
-            max-width: 95%;
         }
 
         .indicator {
@@ -305,7 +281,7 @@
         <h1>Location Authenticity Detector</h1>
         <p class="subtitle">Verify genuine location & detect remote environments</p>
         
-        <button class="locate-btn" id="locateBtn">
+        <button class="locate-btn" id="locateBtn" onclick="startDetection()">
             <span id="btnText">🔍 Locate Me</span>
         </button>
         
@@ -333,16 +309,7 @@
         </div>
     </div>
 
-    <!-- Configuration -->
-    <script src="/config.js"></script>
-    
-    <!-- Include API integration first -->
-    <script src="/api-integration.js"></script>
-    
     <script>
-        console.log('Main script starting...');
-        console.log('USE_API:', typeof USE_API !== 'undefined' ? USE_API : 'undefined');
-        
         // Create animated particles
         function createParticles() {
             const particlesContainer = document.getElementById('particles');
@@ -357,22 +324,6 @@
         }
         createParticles();
 
-        // Configuration for production
-        const CONFIG = {
-            DEBUG_MODE: window.location.hostname === 'localhost',
-            DETECTION_METHODS: {
-                WEBRTC_CHECK: true,
-                DNS_TIMING_CHECK: false, // Disabled in production
-                NAVIGATOR_PROPERTIES_CHECK: true,
-                TIMEZONE_CHECK: true
-            },
-            log: function(...args) {
-                if (this.DEBUG_MODE) {
-                    console.log(...args);
-                }
-            }
-        };
-
         // Detection state
         let detectionState = {
             location: null,
@@ -381,9 +332,6 @@
             environmentFlags: [],
             locationFlags: []
         };
-
-        // Make detectionState globally available for API integration
-        window.detectionState = detectionState;
 
         // Main detection function
         async function startDetection() {
@@ -401,9 +349,6 @@
                 environmentFlags: [],
                 locationFlags: []
             };
-            
-            // Also update window.detectionState
-            window.detectionState = detectionState;
             
             // Update UI
             btn.classList.add('scanning');
@@ -456,8 +401,7 @@
             if (navigator.maxTouchPoints === 0 && 'ontouchstart' in window) {
                 detectionState.environmentFlags.push({
                     type: 'warning',
-                    message: 'Touch events without touch support',
-                    explanation: 'The browser reports touch event capabilities but no touch points are detected. This often indicates remote desktop software that passes through touch events from the host system.'
+                    message: 'Touch events without touch support'
                 });
             }
             
@@ -471,8 +415,7 @@
             if (!isCommonRatio) {
                 detectionState.environmentFlags.push({
                     type: 'warning',
-                    message: 'Unusual screen aspect ratio',
-                    explanation: `Detected aspect ratio: ${screenRatio.toFixed(2)}. Remote desktop sessions often use non-standard window sizes that don't match typical monitor aspect ratios.`
+                    message: 'Unusual screen aspect ratio'
                 });
             }
             
@@ -480,8 +423,7 @@
             if (window.screen.colorDepth < 24) {
                 detectionState.environmentFlags.push({
                     type: 'warning',
-                    message: 'Low color depth (possible RDP)',
-                    explanation: `Color depth: ${window.screen.colorDepth}-bit. Modern displays use 24-bit or higher. Lower values often indicate remote desktop connections optimizing for bandwidth.`
+                    message: 'Low color depth (possible RDP)'
                 });
             }
             
@@ -497,8 +439,7 @@
                             renderer.includes('Microsoft Basic Render') || renderer.includes('llvmpipe')) {
                             detectionState.environmentFlags.push({
                                 type: 'fail',
-                                message: 'Virtual display adapter detected',
-                                explanation: `GPU: ${renderer}. This is a virtual graphics adapter used by virtual machines, not a physical GPU.`
+                                message: 'Virtual display adapter detected'
                             });
                         }
                     }
@@ -512,8 +453,7 @@
                 if (lastEventTime && (now - lastEventTime) < 1) {
                     detectionState.environmentFlags.push({
                         type: 'warning',
-                        message: 'Synthetic input detected',
-                        explanation: 'Mouse or keyboard events are occurring faster than humanly possible (<1ms apart). This suggests automated input or remote desktop software.'
+                        message: 'Synthetic input detected'
                     });
                 }
                 lastEventTime = now;
@@ -526,9 +466,6 @@
             }, 1000);
         }
 
-        // Make function available globally for API integration
-        window.detectEnvironment = detectEnvironment;
-
         // Permission detection
         async function detectPermissions() {
             // Check geolocation permission
@@ -539,8 +476,7 @@
                 if (permissionStatus.state === 'denied') {
                     detectionState.locationFlags.push({
                         type: 'fail',
-                        message: 'Geolocation permission denied',
-                        explanation: 'Location access was explicitly denied. This prevents GPS-based verification. You can change this in your browser settings if you want to enable location detection.'
+                        message: 'Geolocation permission denied'
                     });
                 }
             } catch (e) {
@@ -553,8 +489,7 @@
             if (!navigator.geolocation) {
                 detectionState.locationFlags.push({
                     type: 'fail',
-                    message: 'Geolocation API not available',
-                    explanation: 'Your browser does not support the Geolocation API. This may be an older browser or one with location services disabled at the system level.'
+                    message: 'Geolocation API not available'
                 });
                 return;
             }
@@ -578,8 +513,7 @@
                         if (duration < 10) {
                             detectionState.locationFlags.push({
                                 type: 'warning',
-                                message: 'Location obtained suspiciously fast',
-                                explanation: `Response time: ${duration.toFixed(1)}ms. Real GPS typically takes 100-1000ms. Very fast responses may indicate a location spoofing extension providing cached/fake coordinates.`
+                                message: 'Location obtained suspiciously fast'
                             });
                         }
                         
@@ -587,8 +521,7 @@
                         if (position.coords.accuracy > 1000) {
                             detectionState.locationFlags.push({
                                 type: 'warning',
-                                message: 'Low location accuracy',
-                                explanation: `Accuracy: ±${Math.round(position.coords.accuracy)}m. GPS typically provides 5-10m accuracy. High values suggest IP-based geolocation or poor GPS signal.`
+                                message: 'Low location accuracy'
                             });
                         }
                         
@@ -599,8 +532,7 @@
                         if (lat === 0 && lon === 0) {
                             detectionState.locationFlags.push({
                                 type: 'fail',
-                                message: 'Null Island coordinates detected',
-                                explanation: 'Coordinates (0°, 0°) point to "Null Island" in the Atlantic Ocean. This is a common default value used by spoofing tools.'
+                                message: 'Null Island coordinates detected'
                             });
                         }
                         
@@ -608,33 +540,16 @@
                         if (lat % 1 === 0 && lon % 1 === 0) {
                             detectionState.locationFlags.push({
                                 type: 'warning',
-                                message: 'Suspiciously round coordinates',
-                                explanation: `Coordinates are exact integers (${lat}°, ${lon}°). Real GPS coordinates typically have decimal precision. Round numbers suggest manual input or basic spoofing.`
+                                message: 'Suspiciously round coordinates'
                             });
                         }
                         
                         resolve();
                     },
                     (error) => {
-                        let explanation = '';
-                        switch(error.code) {
-                            case 1: // PERMISSION_DENIED
-                                explanation = 'Location access was denied. Check your browser settings to allow location access for this site.';
-                                break;
-                            case 2: // POSITION_UNAVAILABLE
-                                explanation = 'Unable to determine location. This can happen when GPS/WiFi positioning is unavailable or disabled.';
-                                break;
-                            case 3: // TIMEOUT
-                                explanation = 'Location request timed out. This might indicate poor GPS signal or network issues.';
-                                break;
-                            default:
-                                explanation = 'An unknown error occurred while trying to get your location.';
-                        }
-                        
                         detectionState.locationFlags.push({
                             type: 'fail',
-                            message: `Location error: ${error.message}`,
-                            explanation: explanation
+                            message: `Location error: ${error.message}`
                         });
                         resolve();
                     },
@@ -646,9 +561,6 @@
                 );
             });
         }
-
-        // Make function available globally for API integration
-        window.detectLocation = detectLocation;
 
         // Timing anomaly detection
         async function detectTimingAnomalies() {
@@ -679,8 +591,7 @@
             if (irregularities > 2) {
                 detectionState.environmentFlags.push({
                     type: 'warning',
-                    message: 'Time flow irregularities detected',
-                    explanation: `Found ${irregularities} timing inconsistencies between JavaScript Date and Performance timers. This may indicate time manipulation or virtualization overhead affecting system timing.`
+                    message: 'Time flow irregularities detected'
                 });
             }
         }
@@ -689,129 +600,57 @@
         async function detectBrowserInconsistencies() {
             // Check for browser extension artifacts
             try {
-                // Method 1: Check for modified navigator properties (common with VPN extensions)
-                if (CONFIG.DETECTION_METHODS.NAVIGATOR_PROPERTIES_CHECK) {
-                    const suspiciousProperties = ['brave', 'globalPrivacyControl'];
-                    suspiciousProperties.forEach(prop => {
-                        if (prop in navigator) {
+                // Common VPN/proxy extension detection
+                const testUrls = [
+                    'chrome-extension://fake-extension-id/test.js',
+                    'moz-extension://fake-extension-id/test.js'
+                ];
+                
+                for (const url of testUrls) {
+                    try {
+                        await fetch(url, { mode: 'no-cors' });
+                    } catch (e) {
+                        // Expected to fail, but pattern can reveal extensions
+                    }
+                }
+            } catch (e) {}
+            
+            // Check WebRTC leak
+            try {
+                const pc = new RTCPeerConnection({
+                    iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
+                });
+                
+                pc.createDataChannel('');
+                pc.createOffer().then(offer => pc.setLocalDescription(offer));
+                
+                pc.onicecandidate = (ice) => {
+                    if (!ice || !ice.candidate || !ice.candidate.candidate) return;
+                    
+                    const candidate = ice.candidate.candidate;
+                    const ipRegex = /([0-9]{1,3}\.){3}[0-9]{1,3}/;
+                    const ips = candidate.match(ipRegex);
+                    
+                    if (ips && ips[0]) {
+                        // Check for VPN/proxy indicators
+                        if (ips[0].startsWith('10.') || ips[0].startsWith('172.') || ips[0].startsWith('192.168.')) {
                             detectionState.locationFlags.push({
                                 type: 'warning',
-                                message: `Detected ${prop} property (possible privacy extension)`,
-                                explanation: `The navigator.${prop} property is present. This is added by privacy-focused browsers or extensions and may affect location accuracy.`
+                                message: 'Private IP detected (possible VPN)'
                             });
                         }
-                    });
-                }
-                
-                // Method 2: Check WebRTC for real IP vs VPN IP
-                if (CONFIG.DETECTION_METHODS.WEBRTC_CHECK) {
-                    try {
-                        const pc = new RTCPeerConnection({
-                            iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
-                        });
-                        
-                        pc.createDataChannel('');
-                        const offer = await pc.createOffer();
-                        await pc.setLocalDescription(offer);
-                        
-                        // Set up promise to collect all IPs
-                        const ips = await new Promise((resolve) => {
-                            const collectedIps = new Set();
-                            let timeout = setTimeout(() => {
-                                pc.close();
-                                resolve(Array.from(collectedIps));
-                            }, 2000); // 2 second timeout
-                            
-                            pc.onicecandidate = (ice) => {
-                                if (!ice || !ice.candidate || !ice.candidate.candidate) return;
-                                
-                                const candidate = ice.candidate.candidate;
-                                const ipRegex = /([0-9]{1,3}\.){3}[0-9]{1,3}/g;
-                                const matches = candidate.match(ipRegex);
-                                
-                                if (matches) {
-                                    matches.forEach(ip => {
-                                        collectedIps.add(ip);
-                                        
-                                        // Check for VPN/proxy indicators
-                                        if (ip.startsWith('10.') || ip.startsWith('172.') || ip.startsWith('192.168.')) {
-                                            detectionState.locationFlags.push({
-                                                type: 'warning',
-                                                message: 'Private IP detected (possible VPN)',
-                                                explanation: `WebRTC revealed private IP: ${ip}. This is a local network address that may indicate VPN usage, as VPNs often create virtual network adapters with private IPs.`
-                                            });
-                                        }
-                                    });
-                                }
-                            };
-                        });
-                        
-                        // Check for multiple public IPs (VPN indicator)
-                        const publicIps = ips.filter(ip => 
-                            !ip.startsWith('10.') && 
-                            !ip.startsWith('172.') && 
-                            !ip.startsWith('192.168.') &&
-                            !ip.startsWith('127.')
-                        );
-                        
-                        if (publicIps.length > 1) {
-                            detectionState.locationFlags.push({
-                                type: 'warning',
-                                message: 'Multiple public IPs detected (possible VPN)',
-                                explanation: `Found ${publicIps.length} public IPs: ${publicIps.join(', ')}. Multiple public IPs often indicate VPN or proxy usage, as traffic may be routed through different exit points.`
-                            });
-                        }
-                    } catch (e) {
-                        // WebRTC might be disabled
-                        CONFIG.log('WebRTC detection skipped:', e.message);
                     }
-                }
-                
-                // Method 3: Check for DNS leaks via timing
-                if (CONFIG.DETECTION_METHODS.DNS_TIMING_CHECK) {
-                    try {
-                        const dnsTestDomains = [
-                            'dns-leak-test-' + Math.random().toString(36).substr(2, 9) + '.com'
-                        ];
-                        
-                        for (const domain of dnsTestDomains) {
-                            const startTime = performance.now();
-                            try {
-                                // This will fail but we're measuring timing
-                                await fetch(`https://${domain}`, { 
-                                    mode: 'no-cors',
-                                    cache: 'no-cache'
-                                }).catch(() => {}); // Silently catch the expected error
-                            } catch (e) {
-                                // Expected to fail
-                            }
-                            const endTime = performance.now();
-                            
-                            // Suspiciously fast DNS resolution might indicate local VPN DNS
-                            if (endTime - startTime < 5) {
-                                detectionState.environmentFlags.push({
-                                    type: 'warning',
-                                    message: 'Unusual DNS resolution timing',
-                                    explanation: `DNS lookup completed in ${(endTime - startTime).toFixed(1)}ms. Extremely fast DNS resolution (<5ms) may indicate a local DNS cache or VPN software intercepting DNS queries.`
-                                });
-                            }
-                        }
-                    } catch (e) {
-                        CONFIG.log('DNS timing check skipped:', e.message);
-                    }
-                }
-                
-                // Method 4: Check timezone consistency
-                if (CONFIG.DETECTION_METHODS.TIMEZONE_CHECK) {
-                    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                    if (detectionState.location) {
-                        // This is a simplified check - in production, you'd use a timezone API
-                        const expectedOffset = new Date().getTimezoneOffset();
-                        // Add logic to verify timezone matches location
-                    }
-                }
-            } catch (e) {
-                CONFIG.log('Browser consistency check error:', e);
+                    
+                    pc.close();
+                };
+            } catch (e) {}
+            
+            // Check timezone consistency
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (detectionState.location) {
+                // This is a simplified check - in production, you'd use a timezone API
+                const expectedOffset = new Date().getTimezoneOffset();
+                // Add logic to verify timezone matches location
             }
         }
 
@@ -835,20 +674,7 @@
             detectionState.locationFlags.forEach(flag => {
                 const item = document.createElement('div');
                 item.className = 'detection-item';
-                
-                // Create main message with indicator
-                const mainLine = document.createElement('div');
-                mainLine.innerHTML = `<span class="indicator ${flag.type}"></span>${flag.message}`;
-                item.appendChild(mainLine);
-                
-                // Add explanation if available
-                if (flag.explanation) {
-                    const explanation = document.createElement('div');
-                    explanation.className = 'detection-explanation';
-                    explanation.textContent = flag.explanation;
-                    item.appendChild(explanation);
-                }
-                
+                item.innerHTML = `<span class="indicator ${flag.type}"></span>${flag.message}`;
                 locationDetails.appendChild(item);
                 
                 if (flag.type === 'warning') locationScore -= 20;
@@ -884,20 +710,7 @@
             detectionState.environmentFlags.forEach(flag => {
                 const item = document.createElement('div');
                 item.className = 'detection-item';
-                
-                // Create main message with indicator
-                const mainLine = document.createElement('div');
-                mainLine.innerHTML = `<span class="indicator ${flag.type}"></span>${flag.message}`;
-                item.appendChild(mainLine);
-                
-                // Add explanation if available
-                if (flag.explanation) {
-                    const explanation = document.createElement('div');
-                    explanation.className = 'detection-explanation';
-                    explanation.textContent = flag.explanation;
-                    item.appendChild(explanation);
-                }
-                
+                item.innerHTML = `<span class="indicator ${flag.type}"></span>${flag.message}`;
                 environmentDetails.appendChild(item);
                 
                 if (flag.type === 'warning') environmentScore -= 25;
@@ -919,38 +732,17 @@
             if (detectionState.locationFlags.length === 0) {
                 const item = document.createElement('div');
                 item.className = 'detection-item';
-                
-                const mainLine = document.createElement('div');
-                mainLine.innerHTML = '<span class="indicator pass"></span>All location checks passed';
-                item.appendChild(mainLine);
-                
-                const explanation = document.createElement('div');
-                explanation.className = 'detection-explanation';
-                explanation.textContent = 'No indicators of location spoofing were detected. GPS coordinates appear genuine.';
-                item.appendChild(explanation);
-                
+                item.innerHTML = '<span class="indicator pass"></span>All location checks passed';
                 locationDetails.appendChild(item);
             }
             
             if (detectionState.environmentFlags.length === 0) {
                 const item = document.createElement('div');
                 item.className = 'detection-item';
-                
-                const mainLine = document.createElement('div');
-                mainLine.innerHTML = '<span class="indicator pass"></span>No remote environment indicators';
-                item.appendChild(mainLine);
-                
-                const explanation = document.createElement('div');
-                explanation.className = 'detection-explanation';
-                explanation.textContent = 'Display characteristics match a physical device. No signs of remote desktop or virtual machine usage.';
-                item.appendChild(explanation);
-                
+                item.innerHTML = '<span class="indicator pass"></span>No remote environment indicators';
                 environmentDetails.appendChild(item);
             }
         }
-
-        // Make function available globally for API integration
-        window.analyzeResults = analyzeResults;
 
         // Button ripple effect
         document.getElementById('locateBtn').addEventListener('click', function(e) {
@@ -962,16 +754,6 @@
             ripple.style.top = (e.offsetY - size / 2) + 'px';
             this.appendChild(ripple);
             setTimeout(() => ripple.remove(), 600);
-        });
-
-        // Add click handler for the main detection function
-        document.getElementById('locateBtn').addEventListener('click', startDetection);
-        
-        console.log('Main script finished loading');
-        console.log('Functions available:', {
-            detectLocation: typeof detectLocation,
-            detectEnvironment: typeof detectEnvironment,
-            analyzeResults: typeof analyzeResults
         });
     </script>
 </body>

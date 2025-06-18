@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { detectVPN, getVPNExplanation } = require('./vpn-detection');
 
 // Middleware to log API requests
 router.use((req, res, next) => {
@@ -146,6 +147,35 @@ router.post('/detection/store', async (req, res) => {
     }
 });
 
+// ==================== VPN Detection API ====================
+
+// Check IP for VPN/Proxy
+router.get('/vpn/check/:ip?', async (req, res) => {
+    try {
+        const ip = req.params.ip || getClientIp(req);
+        
+        if (!ip || ip === 'unknown') {
+            return res.status(400).json({ 
+                error: 'Unable to determine IP address' 
+            });
+        }
+        
+        const vpnResults = await detectVPN(ip);
+        const explanation = getVPNExplanation(vpnResults);
+        
+        res.json({
+            ip: ip,
+            isVPN: vpnResults.isVPN,
+            confidence: vpnResults.confidence,
+            explanation: explanation,
+            details: vpnResults.details
+        });
+    } catch (error) {
+        console.error('VPN check error:', error);
+        res.status(500).json({ error: 'Failed to check VPN status' });
+    }
+});
+
 // ==================== Utility Functions ====================
 
 function getClientIp(req) {
@@ -195,6 +225,45 @@ async function verifyLocation(data) {
         flags.push({ type: 'warning', message: 'Stale location data' });
         score -= 10;
     }
+    
+    // VPN Detection
+    let vpnResults = null;
+    if (clientIp && clientIp !== 'unknown') {
+        try {
+            vpnResults = await detectVPN(clientIp);
+            if (vpnResults.isVPN) {
+                const explanation = getVPNExplanation(vpnResults);
+                flags.push({ 
+                    type: 'warning', 
+                    message: 'VPN/Proxy detected',
+                    explanation: explanation
+                });
+                score -= 30;
+                
+                // Add specific service detections
+                if (vpnResults.detections.some(d => d.isTor)) {
+                    flags.push({ 
+                        type: 'fail', 
+                        message: 'Tor network detected',
+                        explanation: 'Connection is routed through the Tor anonymity network. Location cannot be verified.'
+                    });
+                    score -= 20;
+                }
+                
+                if (vpnResults.detections.some(d => d.fraudScore > 90)) {
+                    flags.push({ 
+                        type: 'fail', 
+                        message: 'High-risk IP address',
+                        explanation: 'This IP has been associated with fraudulent activity or abuse.'
+                    });
+                    score -= 20;
+                }
+            }
+        } catch (error) {
+            console.error('VPN detection error:', error);
+            // Don't penalize if VPN detection fails
+        }
+    }
 
     // Determine status
     let status = 'authentic';
@@ -209,7 +278,8 @@ async function verifyLocation(data) {
             coordinates: { latitude, longitude },
             accuracy,
             timestamp: new Date(timestamp).toISOString(),
-            age: age
+            age: age,
+            vpnDetection: vpnResults
         }
     };
 }

@@ -5,10 +5,12 @@ A sophisticated Location Authenticity & Environment Detector that helps identify
 ## Features
 
 - **Location Authenticity Detection**: Verifies if GPS coordinates are genuine or spoofed
+- **VPN/Proxy Detection**: Identifies VPN, proxy, and Tor connections using multiple services
 - **Remote Environment Detection**: Identifies RDP, VNC, and virtual machine usage
 - **Browser Fingerprinting**: Analyzes browser characteristics for anomalies
 - **Real-time Analysis**: Instant detection with visual feedback
 - **RESTful API**: Backend API for location verification and environment analysis
+- **Free VPN Detection**: Works out-of-the-box without API keys (with option to add services for better accuracy)
 
 ## Tech Stack
 
@@ -42,6 +44,12 @@ API_RATE_LIMIT_MAX=100
 
 # Security
 SESSION_SECRET=your-secret-key-here
+
+# Optional: VPN Detection API Keys (see VPN_DETECTION_GUIDE.md)
+# The app includes a free VPN detection service that works without API keys
+# For better accuracy, sign up for free API keys from:
+# IPINFO_TOKEN=your-token-here  # https://ipinfo.io
+# VPNAPI_KEY=your-key-here      # https://vpnapi.io
 ```
 
 4. Start the server:
@@ -134,6 +142,29 @@ Content-Type: application/json
 }
 ```
 
+### VPN/Proxy Detection
+
+#### Check IP for VPN/Proxy
+```http
+GET /api/vpn/check
+GET /api/vpn/check/1.2.3.4
+```
+
+**Response:**
+```json
+{
+  "ip": "1.2.3.4",
+  "isVPN": true,
+  "confidence": 75,
+  "explanation": "VPN/Proxy detected by: IPInfo, VPNAPI. Organization: NordVPN. Hosted on datacenter infrastructure. Confidence: 75%",
+  "details": {
+    "totalChecks": 3,
+    "vpnDetections": 2,
+    "services": [...]
+  }
+}
+```
+
 ### Detection Storage
 
 #### Store Detection Results
@@ -171,6 +202,14 @@ GET /health
 - Location accuracy analysis
 - Timestamp freshness verification
 - WebRTC IP leak detection
+
+### VPN/Proxy Detection
+- **IP Database Checks**: Cross-references IP against known VPN/proxy databases
+- **Organization Analysis**: Identifies datacenter and hosting providers
+- **Multi-Service Verification**: Aggregates results from multiple detection services
+- **Tor Exit Node Detection**: Identifies connections from Tor network
+- **Fraud Score Analysis**: Evaluates IP reputation and abuse history
+- **Free Fallback Service**: Basic detection without API keys
 
 ### Remote Environment Detection
 - Screen resolution pattern analysis
@@ -249,7 +288,5 @@ This project is licensed under the ISC License.
    - Delete node_modules and reinstall
 
 ### Support
-
-
 
 For issues and feature requests, please open an issue on GitHub. 
