@@ -1038,6 +1038,15 @@
                 locationFlags: []
             };
             
+            // Clear cached rule check results
+            cachedRuleCheckResults = null;
+            
+            // Hide the rules check card
+            const rulesCard = document.getElementById('rulesCheckCard');
+            if (rulesCard) {
+                rulesCard.style.display = 'none';
+            }
+            
             // Reset all checks
             Object.keys(allChecks).forEach(category => {
                 allChecks[category].forEach(check => {
@@ -1557,7 +1566,10 @@
                             !ip.startsWith('10.') && 
                             !ip.startsWith('172.') && 
                             !ip.startsWith('192.168.') &&
-                            !ip.startsWith('127.')
+                            !ip.startsWith('127.') &&
+                            ip !== '0.0.0.0' && // Exclude invalid IP
+                            ip !== '::' && // Exclude IPv6 any address
+                            ip !== '::1' // Exclude IPv6 loopback
                         );
                         
                         if (publicIps.length > 1) {
@@ -1656,15 +1668,31 @@
             
             const thresholds = window.ThresholdsConfig.getThresholdsSync();
             
+            console.log('Using thresholds:', JSON.stringify(thresholds, null, 2));
+            
             // Clear previous results
             locationDetails.innerHTML = '';
             environmentDetails.innerHTML = '';
+            
+            // Run rule-based checks if session data is available
+            let ruleCheckResults = null;
+            if (sessionData && window.SessionRulesCheck) {
+                ruleCheckResults = window.SessionRulesCheck.runAllChecks({
+                    multiDetectionSession: sessionData,
+                    currentSession: sessionData
+                });
+                // Cache the results to avoid running checks twice
+                cachedRuleCheckResults = ruleCheckResults;
+            }
             
             // Analyze location authenticity
             let locationScore = 100;
             let locationStatusText = 'Authentic';
             let locationStatusClass = 'status-authentic';
             
+            console.log('Starting location score:', locationScore);
+            
+            // First, add existing location flags
             detectionState.locationFlags.forEach(flag => {
                 const item = document.createElement('div');
                 item.className = 'detection-item';
@@ -1686,7 +1714,74 @@
                 
                 if (flag.type === 'warning') locationScore -= thresholds.scoring.deductions.locationWarning;
                 if (flag.type === 'fail') locationScore -= thresholds.scoring.deductions.locationFail;
+                
+                console.log(`Location flag: ${flag.message} (${flag.type}) - Score now: ${locationScore}`);
             });
+            
+            // Add location-related rule check failures
+            if (ruleCheckResults && ruleCheckResults.results) {
+                const locationRuleChecks = [
+                    'checkIfAllEmptyAccuracy',
+                    'checkIfAllLatLongEmpty', 
+                    'checkIfDevtool',
+                    'rdpCheck'
+                ];
+                
+                // Check if there are any location rule violations to display
+                const hasLocationRuleViolations = ruleCheckResults.results.some(result => 
+                    result.result && locationRuleChecks.includes(result.checkName)
+                );
+                
+                if (hasLocationRuleViolations && detectionState.locationFlags.length > 0) {
+                    // Add a subtle separator if we have both types of checks
+                    const separator = document.createElement('div');
+                    separator.style.cssText = 'height: 1px; background: rgba(255, 255, 255, 0.1); margin: 15px 0;';
+                    locationDetails.appendChild(separator);
+                }
+                
+                ruleCheckResults.results.forEach(result => {
+                    if (result.result && locationRuleChecks.includes(result.checkName)) {
+                        const item = document.createElement('div');
+                        item.className = 'detection-item';
+                        
+                        // Create main message with indicator
+                        const mainLine = document.createElement('div');
+                        mainLine.innerHTML = `<span class="indicator fail"></span>${result.message}`;
+                        item.appendChild(mainLine);
+                        
+                        // Add explanation based on check type
+                        let explanation = '';
+                        switch(result.checkName) {
+                            case 'checkIfAllEmptyAccuracy':
+                                explanation = 'All GPS accuracy readings are empty, which typically indicates location services are disabled or being blocked by spoofing software.';
+                                break;
+                            case 'checkIfAllLatLongEmpty':
+                                explanation = 'No coordinates were returned across multiple detection attempts. This strongly suggests location spoofing or blocking.';
+                                break;
+                            case 'checkIfDevtool':
+                                explanation = 'All accuracy readings are exactly 150m, which is a common default value used by browser developer tools and spoofing extensions.';
+                                break;
+                            case 'rdpCheck':
+                                explanation = 'Very low average response time suggests the location might be coming from a remote desktop or virtualized environment rather than actual GPS.';
+                                break;
+                        }
+                        
+                        if (explanation) {
+                            const explanationEl = document.createElement('div');
+                            explanationEl.className = 'detection-explanation';
+                            explanationEl.textContent = explanation;
+                            item.appendChild(explanationEl);
+                        }
+                        
+                        locationDetails.appendChild(item);
+                        locationScore -= thresholds.scoring.deductions.locationFail;
+                        
+                        console.log(`Rule check: ${result.message} - Score now: ${locationScore}`);
+                    }
+                });
+            }
+            
+            console.log(`Final location score: ${locationScore}, Thresholds - Spoofed: <${thresholds.location.score.likelySpoofed}, Suspicious: <${thresholds.location.score.suspicious}`);
             
             if (locationScore < thresholds.location.score.likelySpoofed) {
                 locationStatusText = 'Likely Spoofed';
@@ -1737,6 +1832,63 @@
                 if (flag.type === 'fail') environmentScore -= thresholds.scoring.deductions.environmentFail;
             });
             
+            // Add environment-related rule check failures
+            if (ruleCheckResults && ruleCheckResults.results) {
+                const environmentRuleChecks = [
+                    'checkVirtualMachine',
+                    'userAgentGpuMatch'
+                ];
+                
+                // Check if there are any environment rule violations to display
+                const hasEnvironmentRuleViolations = ruleCheckResults.results.some(result => 
+                    result.result && environmentRuleChecks.includes(result.checkName)
+                );
+                
+                if (hasEnvironmentRuleViolations && detectionState.environmentFlags.length > 0) {
+                    // Add a subtle separator if we have both types of checks
+                    const separator = document.createElement('div');
+                    separator.style.cssText = 'height: 1px; background: rgba(255, 255, 255, 0.1); margin: 15px 0;';
+                    environmentDetails.appendChild(separator);
+                }
+                
+                ruleCheckResults.results.forEach(result => {
+                    if (result.result && environmentRuleChecks.includes(result.checkName)) {
+                        const item = document.createElement('div');
+                        item.className = 'detection-item';
+                        
+                        // Create main message with indicator
+                        const mainLine = document.createElement('div');
+                        mainLine.innerHTML = `<span class="indicator fail"></span>${result.message}`;
+                        item.appendChild(mainLine);
+                        
+                        // Add explanation based on check type
+                        let explanation = '';
+                        switch(result.checkName) {
+                            case 'checkVirtualMachine':
+                                if (result.message.includes('Linux')) {
+                                    explanation = 'Linux platform detected. While Linux is a legitimate OS, it\'s commonly used in virtual machines and cloud environments for location spoofing.';
+                                } else {
+                                    explanation = 'Virtual machine graphics adapter detected. This indicates the browser is running in a virtualized environment rather than on physical hardware.';
+                                }
+                                break;
+                            case 'userAgentGpuMatch':
+                                explanation = 'The operating system reported by the browser doesn\'t match the GPU hardware. This mismatch often indicates virtualization or spoofing attempts.';
+                                break;
+                        }
+                        
+                        if (explanation) {
+                            const explanationEl = document.createElement('div');
+                            explanationEl.className = 'detection-explanation';
+                            explanationEl.textContent = explanation;
+                            item.appendChild(explanationEl);
+                        }
+                        
+                        environmentDetails.appendChild(item);
+                        environmentScore -= thresholds.scoring.deductions.environmentFail;
+                    }
+                });
+            }
+            
             if (environmentScore < thresholds.environment.score.likelyRemote) {
                 environmentStatusText = 'Remote Desktop';
                 environmentStatusClass = 'status-spoofed';
@@ -1749,7 +1901,7 @@
             environmentStatus.className = `status-badge ${environmentStatusClass}`;
             
             // Add summary items if no issues found
-            if (detectionState.locationFlags.length === 0) {
+            if (detectionState.locationFlags.length === 0 && (!ruleCheckResults || !ruleCheckResults.results.some(r => r.result && ['checkIfAllEmptyAccuracy', 'checkIfAllLatLongEmpty', 'checkIfDevtool', 'rdpCheck'].includes(r.checkName)))) {
                 const item = document.createElement('div');
                 item.className = 'detection-item';
                 
@@ -1765,7 +1917,7 @@
                 locationDetails.appendChild(item);
             }
             
-            if (detectionState.environmentFlags.length === 0) {
+            if (detectionState.environmentFlags.length === 0 && (!ruleCheckResults || !ruleCheckResults.results.some(r => r.result && ['checkVirtualMachine', 'userAgentGpuMatch'].includes(r.checkName)))) {
                 const item = document.createElement('div');
                 item.className = 'detection-item';
                 
@@ -1785,6 +1937,9 @@
         // Make function available globally for API integration
         window.analyzeResults = analyzeResults;
 
+        // Store rule check results globally to avoid running twice
+        let cachedRuleCheckResults = null;
+        
         // Run rule-based checks on session data
         function runRulesCheck() {
             if (!sessionData) {
@@ -1798,8 +1953,8 @@
                 rulesCard.style.display = 'block';
             }
             
-            // Run the checks
-            const checkResults = window.SessionRulesCheck.runAllChecks({
+            // Use cached results if available, otherwise run the checks
+            const checkResults = cachedRuleCheckResults || window.SessionRulesCheck.runAllChecks({
                 multiDetectionSession: sessionData,
                 currentSession: sessionData
             });
@@ -1823,6 +1978,11 @@
             html += `<p><strong>Total Checks:</strong> ${checkResults.summary.totalChecks}</p>`;
             html += `<p><strong>Passed:</strong> <span style="color: #34d399;">${checkResults.summary.passedChecks}</span></p>`;
             html += `<p><strong>Failed:</strong> <span style="color: #ef4444;">${checkResults.summary.failedChecks}</span></p>`;
+            
+            // Note about integration
+            html += '<div style="background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 8px; margin: 15px 0;">';
+            html += '<p style="font-size: 0.85em; opacity: 0.8;">ℹ️ Location and environment-related checks are also shown in their respective sections above.</p>';
+            html += '</div>';
             
             // Failed checks details
             if (checkResults.errorMessages.length > 0) {
@@ -2198,6 +2358,11 @@
             await originalStartDetection();
             // Show pattern analysis card after detection
             window.showPatternAnalysisCard();
+            // Show rules check card
+            const rulesCard = document.getElementById('rulesCheckCard');
+            if (rulesCard) {
+                rulesCard.style.display = 'block';
+            }
         };
         
         // Setup collapse/expand functionality for check categories
@@ -2580,7 +2745,9 @@ document.getElementById('exportSessionBtn').click();
                 singleSession: window.lastDetectionSession,
                 multiDetectionSession: window.lastMultiDetectionSession,
                 // Legacy format for backward compatibility
-                multipleDetections: window.multiDetectionResults
+                multipleDetections: window.multiDetectionResults,
+                // Include rule check results if available
+                ruleCheckResults: cachedRuleCheckResults
             };
             
             const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
