@@ -619,21 +619,58 @@
             color: rgba(255, 255, 255, 0.6);
         }
 
+        /* Toggle all button */
         .toggle-all-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: rgba(255, 255, 255, 0.8);
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.8em;
+            padding: 8px 16px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 20px;
             cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 500;
             transition: all 0.3s ease;
         }
-
+        
         .toggle-all-btn:hover {
-            background: rgba(255, 255, 255, 0.15);
-            color: rgba(255, 255, 255, 1);
-            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .toggle-all-btn.collapsed {
+            background: linear-gradient(45deg, #94a3b8, #64748b);
+        }
+        
+        /* Export button */
+        .export-btn {
+            padding: 8px 16px;
+            background: linear-gradient(45deg, #10b981, #059669);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .export-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(16, 185, 129, 0.3);
+        }
+        
+        .export-btn:active {
+            transform: translateY(0);
+        }
+        
+        .export-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
         }
 
         @media (max-width: 600px) {
@@ -673,9 +710,6 @@
         </button>
         
         <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-            <button class="locate-btn" id="multiDetectBtn" style="flex: 1; background: linear-gradient(45deg, #059669 0%, #10b981 100%); padding: 15px; font-size: 1em;">
-                <span id="multiDetectBtnText">🔄 Run Multiple Detections (3x)</span>
-            </button>
             <button class="locate-btn" id="exportSessionBtn" style="flex: 1; background: linear-gradient(45deg, #0891b2 0%, #06b6d4 100%); padding: 15px; font-size: 1em; display: none;">
                 <span>📥 Export Sessions</span>
             </button>
@@ -812,6 +846,9 @@
             environmentFlags: [],
             locationFlags: []
         };
+
+        // Global session data for export
+        let sessionData = null;
 
         // Comprehensive check list
         const allChecks = {
@@ -1022,6 +1059,27 @@
             await updateProgress(90);
             await detectBrowserInconsistencies();
             
+            const detectionCount = 3;
+            const delay = 1000;
+            const session = await window.DetectionRunner.runSessionWithMultipleDetections(
+                detectionCount, 
+                delay, 
+                {
+                    includeLocation: true,
+                    includeEnvironment: true,
+                    includeNetwork: true,
+                    silent: false,
+                    metadata: {
+                        purpose: 'multi-detection-consistency-check',
+                        userAgent: navigator.userAgent
+                    }
+                }
+            );
+            console.log('session', session);
+            
+            // Store session data globally for export
+            sessionData = session;
+            
             await updateProgress(100);
             
             // Analyze results
@@ -1033,6 +1091,9 @@
                 btnText.textContent = '🔍 Locate Me';
                 progressBar.style.display = 'none';
                 progressFill.style.width = '0%';
+                
+                // Show export button
+                document.getElementById('exportSessionBtn').style.display = 'block';
             }, 500);
         }
 
@@ -2290,6 +2351,7 @@ document.getElementById('exportSessionBtn').click();
                         }
                     }
                 );
+                console.log('session', session);
                 
                 clearInterval(progressInterval);
                 await updateProgress(100);
@@ -2413,6 +2475,7 @@ document.getElementById('exportSessionBtn').click();
         document.getElementById('exportSessionBtn').addEventListener('click', function() {
             const exportData = {
                 timestamp: new Date().toISOString(),
+                currentSession: sessionData,  // Add current session data
                 singleSession: window.lastDetectionSession,
                 multiDetectionSession: window.lastMultiDetectionSession,
                 // Legacy format for backward compatibility

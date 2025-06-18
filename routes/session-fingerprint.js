@@ -64,6 +64,7 @@ function generateSessionFingerprint(detectionData) {
             clientIp: clientIp || null,
             userAgent: userAgent || null,
             webrtcIps: network?.webrtcIps || [],
+            clientIP: network?.clientIP || null,
             dnsTime: network?.dnsTime || null,
             navigatorProperties: network?.navigatorProperties || []
         },

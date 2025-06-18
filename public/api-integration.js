@@ -450,6 +450,8 @@ async function detectEnvironmentWithAPI() {
             const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
             if (debugInfo) {
                 environmentData.webglRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                environmentData.clientIP = window.detectionState.location.clientIP;
+                
             }
         }
     } catch (e) {}
@@ -523,11 +525,12 @@ async function storeSessionFingerprint() {
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 language: navigator.language,
                 platform: navigator.platform,
-                webglRenderer: getWebGLRenderer(),
+                gpu: getWebGLRenderer(),
                 flags: window.detectionState.environmentFlags
             },
             network: {
                 webrtcIps: collectWebRTCIPs(),
+                clientIP: window.detectionState.location.clientIP,
                 navigatorProperties: detectNavigatorProperties()
             },
             timestamp: new Date().toISOString(),

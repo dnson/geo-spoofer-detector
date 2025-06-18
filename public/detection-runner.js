@@ -322,6 +322,7 @@ window.DetectionRunner = (function() {
                         if (debugInfo) {
                             const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
                             detectionState.environment.webglRenderer = renderer;
+                            detectionState.environment.clientIp = window.detectionState.location.clientIP;
                             
                             if (renderer.includes('VMware') || renderer.includes('VirtualBox')) {
                                 detectionState.environmentFlags.push({
