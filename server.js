@@ -33,6 +33,11 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// Serve specific static files
+app.get('/api-integration.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'api-integration.js'));
+});
+
 // Serve static files
 app.use(express.static('public'));
 

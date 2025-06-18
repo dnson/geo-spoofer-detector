@@ -20,8 +20,24 @@
       "dest": "/server.js"
     },
     {
-      "src": "/(.*)",
+      "src": "/(.*)\\.js$",
+      "dest": "/public/$1.js"
+    },
+    {
+      "src": "/(.*)\\.css$",
+      "dest": "/public/$1.css"
+    },
+    {
+      "src": "/(.*)\\.html$",
+      "dest": "/public/$1.html"
+    },
+    {
+      "src": "/",
       "dest": "/server.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/$1"
     }
   ]
 }
