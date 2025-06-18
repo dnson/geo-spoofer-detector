@@ -68,8 +68,13 @@ app.use((req, res) => {
     res.status(404).json({ error: 'Not found' });
 });
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📍 Location Authenticity Detector API ready`);
-}); 
+// Start server only when not in Vercel environment
+if (process.env.VERCEL !== '1') {
+    app.listen(PORT, () => {
+        console.log(`🚀 Server running on http://localhost:${PORT}`);
+        console.log(`📍 Location Authenticity Detector API ready`);
+    });
+}
+
+// Export the Express app for Vercel
+module.exports = app; 
