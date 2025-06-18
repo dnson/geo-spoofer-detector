@@ -15,7 +15,7 @@ app.use(helmet({
         directives: {
             defaultSrc: ["'self'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
             imgSrc: ["'self'", "data:", "https:"],
             connectSrc: ["'self'", "https://stun.l.google.com:19302"]
         }
@@ -39,7 +39,7 @@ app.get('/api-integration.js', (req, res) => {
 });
 
 // Serve static files
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // API Routes
 const apiRouter = require('./routes/api');
