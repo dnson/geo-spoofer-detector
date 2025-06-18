@@ -1,0 +1,65 @@
+{
+  "location": {
+    "responseTime": {
+      "suspicious": 10,
+      "description": "Response time in milliseconds below which location response is considered suspiciously fast"
+    },
+    "accuracy": {
+      "low": 1000,
+      "description": "Accuracy in meters above which GPS accuracy is considered low"
+    },
+    "score": {
+      "likelySpoofed": 60,
+      "suspicious": 80,
+      "description": "Location verification score thresholds"
+    }
+  },
+  "environment": {
+    "score": {
+      "likelyRemote": 50,
+      "possiblyRemote": 75,
+      "description": "Environment detection score thresholds"
+    },
+    "colorDepth": {
+      "rdpIndicator": 24,
+      "description": "Color depth below which might indicate RDP connection"
+    }
+  },
+  "vpn": {
+    "confidence": {
+      "detected": 50,
+      "description": "Confidence percentage above which VPN is considered detected"
+    }
+  },
+  "riskAssessment": {
+    "averageScore": {
+      "high": 40,
+      "medium": 70,
+      "description": "Average score thresholds for overall risk assessment"
+    },
+    "riskScore": {
+      "high": 60,
+      "medium": 30,
+      "description": "Risk score thresholds for session fingerprinting"
+    }
+  },
+  "patternAnalysis": {
+    "vpnRiskBonus": 30,
+    "lowAccuracyBonus": 15,
+    "fastResponseBonus": 20,
+    "vmDetectionBonus": 25,
+    "lowColorDepthBonus": 15,
+    "highRiskSimilarBonus": 20,
+    "similarityThreshold": 0.9,
+    "description": "Risk score bonuses for various detection patterns"
+  },
+  "scoring": {
+    "deductions": {
+      "locationWarning": 20,
+      "locationFail": 40,
+      "environmentWarning": 25,
+      "environmentFail": 50,
+      "description": "Score deductions for various flag types"
+    }
+  }
+} 

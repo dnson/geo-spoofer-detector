@@ -171,11 +171,11 @@ async function detectLocationWithAPI() {
 
                 console.log('Location stored in detectionState:', window.detectionState.location);
                 
-                console.log('Location stored in detectionState:', window.detectionState.location);
+                const thresholds = window.ThresholdsConfig.getThresholdsSync();
                 
                 // Check for suspiciously fast response (client-side check)
                 window.updateCheck('location', 'response-time', 'running');
-                if (duration < 10) {
+                if (duration < thresholds.location.responseTime.suspicious) {
                     window.detectionState.locationFlags.push({
                         type: 'warning',
                         message: 'Location obtained suspiciously fast',
@@ -188,7 +188,7 @@ async function detectLocationWithAPI() {
                 
                 // Check accuracy
                 window.updateCheck('location', 'accuracy', 'running');
-                if (position.coords.accuracy > 1000) {
+                if (position.coords.accuracy > thresholds.location.accuracy.low) {
                     window.detectionState.locationFlags.push({
                         type: 'warning',
                         message: 'Low location accuracy',
@@ -700,19 +700,21 @@ function detectNavigatorProperties() {
 }
 
 function calculateLocationScore() {
+    const thresholds = window.ThresholdsConfig.getThresholdsSync();
     let score = 100;
     window.detectionState.locationFlags.forEach(flag => {
-        if (flag.type === 'warning') score -= 20;
-        if (flag.type === 'fail') score -= 40;
+        if (flag.type === 'warning') score -= thresholds.scoring.deductions.locationWarning;
+        if (flag.type === 'fail') score -= thresholds.scoring.deductions.locationFail;
     });
     return Math.max(0, score);
 }
 
 function calculateEnvironmentScore() {
+    const thresholds = window.ThresholdsConfig.getThresholdsSync();
     let score = 100;
     window.detectionState.environmentFlags.forEach(flag => {
-        if (flag.type === 'warning') score -= 25;
-        if (flag.type === 'fail') score -= 50;
+        if (flag.type === 'warning') score -= thresholds.scoring.deductions.environmentWarning;
+        if (flag.type === 'fail') score -= thresholds.scoring.deductions.environmentFail;
     });
     return Math.max(0, score);
 }
@@ -799,10 +801,11 @@ function setupAPIIntegration() {
                 // Use API score if location not available
                 if (!window.detectionState.location && window.detectionState.verificationScore !== undefined) {
                     const score = window.detectionState.verificationScore;
-                    if (score < 60) {
+                    const thresholds = window.ThresholdsConfig.getThresholdsSync();
+                    if (score < thresholds.location.score.likelySpoofed) {
                         statusText = 'Likely Spoofed';
                         statusClass = 'status-spoofed';
-                    } else if (score < 80) {
+                    } else if (score < thresholds.location.score.suspicious) {
                         statusText = 'Suspicious';
                         statusClass = 'status-suspicious';
                     }
@@ -850,4 +853,102 @@ function setupAPIIntegration() {
             storeSessionFingerprint();
         };
     }
-} 
+}
+
+/**
+ * Store grouped sessions for pattern analysis
+ */
+async function storeGroupedSessions(sessions, metadata = {}) {
+    try {
+        // Show storing notification
+        showNotification('Storing grouped sessions...', 'info');
+        
+        const response = await fetch(`${API_BASE_URL}/session/store-group`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                sessions: sessions,
+                metadata: metadata
+            })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('Grouped sessions stored:', result);
+            
+            // Show success notification
+            showNotification(`Group stored! ID: ${result.groupSessionId.substring(0, 8)}...`, 'success');
+            
+            return result;
+        } else {
+            throw new Error(`Server returned ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Failed to store grouped sessions:', error);
+        
+        // Show error notification with helpful message
+        if (error.message.includes('Failed to fetch')) {
+            showNotification('Group storage skipped - Gemini/Qdrant not configured', 'warning');
+        } else {
+            showNotification('Failed to store group: ' + error.message, 'error');
+        }
+        
+        return null;
+    }
+}
+
+// Make storeGroupedSessions available globally
+window.storeGroupedSessions = storeGroupedSessions;
+
+/**
+ * Store session with multiple detections
+ */
+async function storeSessionWithDetections(session) {
+    try {
+        // Show storing notification
+        showNotification('Storing session with multiple detections...', 'info');
+        
+        const response = await fetch(`${API_BASE_URL}/session/store-multi`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                sessionId: session.sessionId,
+                startTime: session.startTime,
+                endTime: session.endTime,
+                detections: session.detections,
+                metadata: session.metadata,
+                summary: session.summary
+            })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('Multi-detection session stored:', result);
+            
+            // Show success notification
+            showNotification(`Session stored! ID: ${result.sessionId.substring(0, 8)}... (${result.detectionCount} detections)`, 'success');
+            
+            return result;
+        } else {
+            throw new Error(`Server returned ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Failed to store multi-detection session:', error);
+        
+        // Show error notification with helpful message
+        if (error.message.includes('Failed to fetch')) {
+            showNotification('Session storage skipped - Gemini/Qdrant not configured', 'warning');
+        } else {
+            showNotification('Failed to store session: ' + error.message, 'error');
+        }
+        
+        return null;
+    }
+}
+
+// Make storeSessionWithDetections available globally
+window.storeSessionWithDetections = storeSessionWithDetections; 

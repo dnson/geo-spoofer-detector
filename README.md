@@ -269,6 +269,318 @@ Content-Type: application/json
 }
 ```
 
+#### Lite Analysis
+```http
+POST /api/session/analyze-lite
+Content-Type: application/json
+
+{
+  "sessionData": {
+    "location": {...},
+    "environment": {...},
+    "network": {...},
+    "detectionResults": {...}
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "fingerprint": {...},
+  "evaluation": {
+    "riskAssessment": "MEDIUM",
+    "riskScore": 45,
+    "confidence": 80,
+    "explanation": "...",
+    "riskFactors": [...],
+    "patterns": [...],
+    "recommendations": [...],
+    "processingTime": "fast"
+  },
+  "similarSessions": [...]
+}
+```
+
+#### Store Grouped Sessions
+```http
+POST /api/session/store-group
+Content-Type: application/json
+
+{
+  "sessions": [...],
+  "metadata": {
+    "detectionCount": 3,
+    "delay": 1000
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "groupSessionId": "abc123...",
+  "sessionCount": 3,
+  "storedSessionIds": [...],
+  "groupSummary": {
+    "analysis": {...},
+    "consistencyMetrics": {...}
+  }
+}
+```
+
+#### Retrieve Grouped Sessions
+```http
+GET /api/session/group/:groupSessionId
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "groupSessionId": "abc123...",
+  "sessions": [...],
+  "metadata": {...},
+  "analysis": {...}
+}
+```
+
+### Thresholds Configuration
+
+#### Get Current Thresholds
+```http
+GET /api/thresholds
+```
+
+**Response:**
+```json
+{
+  "location": {
+    "responseTime": { "suspicious": 10 },
+    "accuracy": { "low": 1000 },
+    "score": { "likelySpoofed": 60, "suspicious": 80 }
+  },
+  "environment": {
+    "score": { "likelyRemote": 50, "possiblyRemote": 75 },
+    "colorDepth": { "rdpIndicator": 24 }
+  },
+  "vpn": {
+    "confidence": { "detected": 50 }
+  },
+  ...
+}
+```
+
+#### Update Thresholds (Admin Only)
+```http
+PUT /api/thresholds
+Content-Type: application/json
+
+{
+  "location": { ... },
+  "environment": { ... },
+  "vpn": { ... },
+  "riskAssessment": { ... },
+  "patternAnalysis": { ... },
+  "scoring": { ... }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Thresholds updated successfully",
+  "thresholds": { ... }
+}
+```
+
+### Configuration File
+
+The application uses a `thresholds.json` file to define detection thresholds. This file is loaded on startup and can be modified to adjust detection sensitivity:
+
+```json
+{
+  "location": {
+    "responseTime": {
+      "suspicious": 10,
+      "description": "Response time in ms below which is suspicious"
+    },
+    "accuracy": {
+      "low": 1000,
+      "description": "GPS accuracy in meters above which is considered low"
+    },
+    "score": {
+      "likelySpoofed": 60,
+      "suspicious": 80
+    }
+  },
+  "environment": {
+    "score": {
+      "likelyRemote": 50,
+      "possiblyRemote": 75
+    },
+    "colorDepth": {
+      "rdpIndicator": 24
+    }
+  },
+  "vpn": {
+    "confidence": {
+      "detected": 50
+    }
+  }
+}
+```
+
+Key threshold settings:
+- **Location Response Time**: Fast responses (<10ms) may indicate cached/spoofed coordinates
+- **GPS Accuracy**: Values >1000m suggest IP-based geolocation instead of GPS
+- **Score Thresholds**: Control when locations/environments are flagged as suspicious
+- **VPN Confidence**: Percentage of detection services needed to confirm VPN usage
+- **Risk Scoring**: Bonuses added for various spoofing indicators
+
+The thresholds are automatically reloaded when the file is modified, allowing real-time tuning without server restart.
+
+## Detection Runner
+
+The Detection Runner module (`public/detection-runner.js`) provides a reusable API for running detections programmatically:
+
+### Features
+- **Session-Based Detection**: Store multiple detections in a single session as an array
+- **Multiple Detection Runs**: Compare consistency across multiple detection attempts
+- **Session Export**: Export detection sessions for further analysis
+- **Consistency Analysis**: Automatically detect inconsistencies between runs
+- **Programmatic API**: Run detections from your own code
+
+### Session-Based Detection (NEW)
+
+The new session-based approach allows you to run multiple detections and store them as an array within a single session:
+
+```javascript
+// Start a new session
+const sessionId = window.DetectionRunner.startSession({
+    purpose: 'user-verification',
+    notes: 'Testing location consistency'
+});
+
+// Run multiple detections in the same session
+await window.DetectionRunner.runDetectionInSession({ 
+    includeLocation: true,
+    includeEnvironment: true,
+    autoSession: false  // We already started a session
+});
+
+// Wait a bit and run another detection
+await new Promise(resolve => setTimeout(resolve, 2000));
+
+await window.DetectionRunner.runDetectionInSession({ 
+    includeLocation: true,
+    includeEnvironment: true,
+    autoSession: false
+});
+
+// End the session and get all detections
+const session = window.DetectionRunner.endSession();
+
+console.log(session.sessionId);          // Single session ID
+console.log(session.detections.length);  // Number of detections (2)
+console.log(session.summary);            // Analysis of all detections
+console.log(session.detections);         // Array of all detection data
+
+// Store the complete session
+await window.DetectionRunner.storeSession(session);
+```
+
+### Run Multiple Detections in One Call
+
+For convenience, you can also run multiple detections automatically:
+
+```javascript
+// Run 3 detections with 1.5 second delay between each
+const session = await window.DetectionRunner.runSessionWithMultipleDetections(
+    3,      // Number of detections
+    1500,   // Delay between runs (ms)
+    {       // Options
+        includeLocation: true,
+        includeEnvironment: true,
+        includeNetwork: true,
+        metadata: {
+            purpose: 'consistency-check',
+            userAgent: navigator.userAgent
+        }
+    }
+);
+
+// Session object contains:
+// - sessionId: Unique session identifier
+// - startTime/endTime: Session timespan
+// - detections: Array of all detection results
+// - summary: Aggregated analysis
+// - metadata: Custom metadata
+
+// Store the session
+await window.DetectionRunner.storeSession(session);
+```
+
+### Session Object Structure
+
+Each session contains multiple detections in an array:
+
+```json
+{
+  "sessionId": "unique-session-id",
+  "startTime": "2024-01-01T00:00:00.000Z",
+  "endTime": "2024-01-01T00:01:00.000Z",
+  "detections": [
+    {
+      "detectionIndex": 0,
+      "detectionTimestamp": "2024-01-01T00:00:00.000Z",
+      "location": { ... },
+      "environment": { ... },
+      "network": { ... },
+      "scores": { ... },
+      "fingerprint": "abc123"
+    },
+    {
+      "detectionIndex": 1,
+      "detectionTimestamp": "2024-01-01T00:00:30.000Z",
+      "location": { ... },
+      "environment": { ... },
+      "network": { ... },
+      "scores": { ... },
+      "fingerprint": "def456"
+    }
+  ],
+  "summary": {
+    "detectionCount": 2,
+    "timespan": { ... },
+    "averageScores": { ... },
+    "consistency": { ... }
+  },
+  "metadata": { ... }
+}
+```
+
+### Single Detection
+
+You can still run single detections without session management:
+
+```javascript
+// Run a single detection
+const session = await window.DetectionRunner.runDetection({
+    includeLocation: true,
+    includeEnvironment: true,
+    includeNetwork: true,
+    silent: false  // Set to true to suppress console logs
+});
+
+console.log(session.sessionId);      // Unique session identifier
+console.log(session.scores);         // Detection scores
+console.log(session.fingerprint);    // Session fingerprint
+```
+
 ## Detection Methods
 
 ### Location Spoofing Detection
@@ -317,10 +629,18 @@ geo-spoofer-detector/
 ├── server.js           # Main server file
 ├── package.json        # Dependencies
 ├── .gitignore         # Git ignore rules
+├── thresholds.json    # Detection threshold configuration
 ├── routes/
-│   └── api.js         # API route handlers
+│   ├── api.js         # API route handlers
+│   ├── session-fingerprint.js  # Session analysis
+│   ├── vpn-detection.js       # VPN detection logic
+│   └── threshold-config.js    # Threshold management
 └── public/
-    └── index.html     # Frontend application
+    ├── index.html     # Frontend application
+    ├── api-integration.js    # API client
+    ├── config.js            # Frontend config
+    ├── thresholds-config.js # Frontend threshold loader
+    └── detection-runner.js  # Detection runner module
 ```
 
 ### Adding New Detection Methods
@@ -371,4 +691,212 @@ This project is licensed under the ISC License.
 
 ### Support
 
-For issues and feature requests, please open an issue on GitHub. 
+For issues and feature requests, please open an issue on GitHub.
+
+#### Store Session with Multiple Detections
+```http
+POST /api/session/store-multi
+Content-Type: application/json
+
+{
+  "sessionId": "unique-session-id",
+  "startTime": "2024-01-01T00:00:00.000Z",
+  "endTime": "2024-01-01T00:01:00.000Z",
+  "detections": [
+    {
+      "location": {...},
+      "environment": {...},
+      "network": {...},
+      "scores": {...},
+      "timestamp": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "location": {...},
+      "environment": {...},
+      "network": {...},
+      "scores": {...},
+      "timestamp": "2024-01-01T00:00:30.000Z"
+    }
+  ],
+  "metadata": {
+    "purpose": "consistency-check"
+  },
+  "summary": {
+    "detectionCount": 2,
+    "averageScores": {...},
+    "consistency": {...}
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "sessionId": "unique-session-id",
+  "storedId": "qdrant-point-id",
+  "detectionCount": 2,
+  "summary": {
+    "totalSessions": 2,
+    "locationVariance": {...},
+    "scoreStatistics": {...},
+    "consistencyMetrics": {...}
+  }
+}
+```
+
+#### Retrieve Session with Multiple Detections
+```http
+GET /api/session/multi/:sessionId
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "sessionId": "unique-session-id",
+  "detections": [...],
+  "summary": {...},
+  "metadata": {...}
+}
+```
+
+#### Store Grouped Sessions
+```http
+POST /api/session/store-group
+Content-Type: application/json
+
+{
+  "sessions": [...],
+  "metadata": {
+    "detectionCount": 3,
+    "delay": 1000
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "groupSessionId": "abc123...",
+  "sessionCount": 3,
+  "storedSessionIds": [...],
+  "groupSummary": {
+    "analysis": {...},
+    "consistencyMetrics": {...}
+  }
+}
+```
+
+#### Retrieve Grouped Sessions
+```http
+GET /api/session/group/:groupSessionId
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "groupSessionId": "abc123...",
+  "sessions": [...],
+  "metadata": {...},
+  "analysis": {...}
+}
+```
+
+### Thresholds Configuration
+
+#### Get Current Thresholds
+```http
+GET /api/thresholds
+```
+
+**Response:**
+```json
+{
+  "location": {
+    "responseTime": { "suspicious": 10 },
+    "accuracy": { "low": 1000 },
+    "score": { "likelySpoofed": 60, "suspicious": 80 }
+  },
+  "environment": {
+    "score": { "likelyRemote": 50, "possiblyRemote": 75 },
+    "colorDepth": { "rdpIndicator": 24 }
+  },
+  "vpn": {
+    "confidence": { "detected": 50 }
+  },
+  ...
+}
+```
+
+#### Update Thresholds (Admin Only)
+```http
+PUT /api/thresholds
+Content-Type: application/json
+
+{
+  "location": { ... },
+  "environment": { ... },
+  "vpn": { ... },
+  "riskAssessment": { ... },
+  "patternAnalysis": { ... },
+  "scoring": { ... }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Thresholds updated successfully",
+  "thresholds": { ... }
+}
+```
+
+### Configuration File
+
+The application uses a `thresholds.json` file to define detection thresholds. This file is loaded on startup and can be modified to adjust detection sensitivity:
+
+```json
+{
+  "location": {
+    "responseTime": {
+      "suspicious": 10,
+      "description": "Response time in ms below which is suspicious"
+    },
+    "accuracy": {
+      "low": 1000,
+      "description": "GPS accuracy in meters above which is considered low"
+    },
+    "score": {
+      "likelySpoofed": 60,
+      "suspicious": 80
+    }
+  },
+  "environment": {
+    "score": {
+      "likelyRemote": 50,
+      "possiblyRemote": 75
+    },
+    "colorDepth": {
+      "rdpIndicator": 24
+    }
+  },
+  "vpn": {
+    "confidence": {
+      "detected": 50
+    }
+  }
+}
+```
+
+Key threshold settings:
+- **Location Response Time**: Fast responses (<10ms) may indicate cached/spoofed coordinates
+- **GPS Accuracy**: Values >1000m suggest IP-based geolocation instead of GPS
+- **Score Thresholds**: Control when locations/environments are flagged as suspicious
+- **VPN Confidence**: Percentage of detection services needed to confirm VPN usage
+- **Risk Scoring**: Bonuses added for various spoofing indicators
+
+The thresholds are automatically reloaded when the file is modified, allowing real-time tuning without server restart. 

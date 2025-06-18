@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Location Authenticity & Environment Detector</title>
+    <title>Geo Spoofer Detector</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
+    <script src="/thresholds-config.js"></script>
+    <script src="/detection-runner.js"></script>
     <style>
         * {
             margin: 0;
@@ -669,8 +672,27 @@
             <span id="btnText">🔍 Locate Me</span>
         </button>
         
+        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+            <button class="locate-btn" id="multiDetectBtn" style="flex: 1; background: linear-gradient(45deg, #059669 0%, #10b981 100%); padding: 15px; font-size: 1em;">
+                <span id="multiDetectBtnText">🔄 Run Multiple Detections (3x)</span>
+            </button>
+            <button class="locate-btn" id="exportSessionBtn" style="flex: 1; background: linear-gradient(45deg, #0891b2 0%, #06b6d4 100%); padding: 15px; font-size: 1em; display: none;">
+                <span>📥 Export Sessions</span>
+            </button>
+        </div>
+        
         <div class="progress-bar" id="progressBar">
             <div class="progress-fill" id="progressFill"></div>
+        </div>
+        
+        <div id="multiDetectionResults" style="display: none; margin-bottom: 20px;">
+            <div class="result-card">
+                <div class="result-header">
+                    <span class="result-title">🔄 Multiple Detection Analysis</span>
+                    <span class="status-badge" id="consistencyStatus"></span>
+                </div>
+                <div class="detection-details" id="multiDetectionDetails"></div>
+            </div>
         </div>
         
         <div class="results" id="results">
@@ -1203,9 +1225,11 @@
                             timestamp: position.timestamp
                         };
                         
+                        const thresholds = window.ThresholdsConfig.getThresholdsSync();
+                        
                         // Check for suspiciously fast response
                         updateCheck('location', 'response-time', 'running');
-                        if (duration < 10) {
+                        if (duration < thresholds.location.responseTime.suspicious) {
                             detectionState.locationFlags.push({
                                 type: 'warning',
                                 message: 'Location obtained suspiciously fast',
@@ -1218,7 +1242,7 @@
                         
                         // Check accuracy
                         updateCheck('location', 'accuracy', 'running');
-                        if (position.coords.accuracy > 1000) {
+                        if (position.coords.accuracy > thresholds.location.accuracy.low) {
                             detectionState.locationFlags.push({
                                 type: 'warning',
                                 message: 'Low location accuracy',
@@ -1551,6 +1575,8 @@
             const environmentStatus = document.getElementById('environmentStatus');
             const coordinates = document.getElementById('coordinates');
             
+            const thresholds = window.ThresholdsConfig.getThresholdsSync();
+            
             // Clear previous results
             locationDetails.innerHTML = '';
             environmentDetails.innerHTML = '';
@@ -1579,14 +1605,14 @@
                 
                 locationDetails.appendChild(item);
                 
-                if (flag.type === 'warning') locationScore -= 20;
-                if (flag.type === 'fail') locationScore -= 40;
+                if (flag.type === 'warning') locationScore -= thresholds.scoring.deductions.locationWarning;
+                if (flag.type === 'fail') locationScore -= thresholds.scoring.deductions.locationFail;
             });
             
-            if (locationScore < 60) {
+            if (locationScore < thresholds.location.score.likelySpoofed) {
                 locationStatusText = 'Likely Spoofed';
                 locationStatusClass = 'status-spoofed';
-            } else if (locationScore < 80) {
+            } else if (locationScore < thresholds.location.score.suspicious) {
                 locationStatusText = 'Suspicious';
                 locationStatusClass = 'status-suspicious';
             }
@@ -1628,14 +1654,14 @@
                 
                 environmentDetails.appendChild(item);
                 
-                if (flag.type === 'warning') environmentScore -= 25;
-                if (flag.type === 'fail') environmentScore -= 50;
+                if (flag.type === 'warning') environmentScore -= thresholds.scoring.deductions.environmentWarning;
+                if (flag.type === 'fail') environmentScore -= thresholds.scoring.deductions.environmentFail;
             });
             
-            if (environmentScore < 50) {
+            if (environmentScore < thresholds.environment.score.likelyRemote) {
                 environmentStatusText = 'Remote Desktop';
                 environmentStatusClass = 'status-spoofed';
-            } else if (environmentScore < 75) {
+            } else if (environmentScore < thresholds.environment.score.possiblyRemote) {
                 environmentStatusText = 'Possibly Remote';
                 environmentStatusClass = 'status-suspicious';
             }
@@ -2081,6 +2107,331 @@
             console.log('Re-running API integration setup with all functions available');
             setupAPIIntegration();
         }
+
+        // Initialize detection when page loads
+        window.addEventListener('DOMContentLoaded', async () => {
+            // Load thresholds configuration
+            await window.ThresholdsConfig.loadThresholds();
+            console.log('Thresholds loaded:', window.ThresholdsConfig.getThresholdsSync());
+            
+            // Initialize all checks
+            renderChecks();
+            
+            // Make functions globally available for API integration
+            window.detectLocation = detectLocation;
+            window.detectEnvironment = detectEnvironment;
+            window.analyzeResults = analyzeResults;
+        });
+        
+        // Example usage for developers (available in console)
+        console.log(`
+=== Geo Spoofer Detector - Developer Examples ===
+
+// NEW: Session-based detection (multiple detections in one session)
+// Start a session
+const sessionId = window.DetectionRunner.startSession({ purpose: 'testing' });
+
+// Run detections in the session
+await window.DetectionRunner.runDetectionInSession();
+await window.DetectionRunner.runDetectionInSession();
+
+// End session and get complete data
+const session = window.DetectionRunner.endSession();
+console.log('Session with', session.detections.length, 'detections');
+
+// Store the session
+await window.DetectionRunner.storeSession(session);
+
+// OR: Run multiple detections in one call
+const multiSession = await window.DetectionRunner.runSessionWithMultipleDetections(
+    3,     // Run 3 detections
+    1000,  // 1 second delay between each
+    {
+        includeLocation: true,
+        includeEnvironment: true,
+        includeNetwork: true,
+        metadata: { purpose: 'consistency-check' }
+    }
+);
+
+// Store multi-detection session
+await window.DetectionRunner.storeSession(multiSession);
+
+// Access last sessions:
+console.log(window.lastDetectionSession);         // Single detection
+console.log(window.lastMultiDetectionSession);    // Multi-detection session
+console.log(window.lastStoredSessionId);          // Last stored session ID
+
+// Export all sessions:
+document.getElementById('exportSessionBtn').click();
+        `);
+
+        // Store last session for export
+        window.lastDetectionSession = null;
+        window.multiDetectionResults = null;
+        
+        // Update startDetection to use DetectionRunner
+        const startDetectionWithRunner = async function() {
+            const btn = document.getElementById('locateBtn');
+            const btnText = document.getElementById('btnText');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            const results = document.getElementById('results');
+            
+            // Update UI
+            btn.classList.add('scanning');
+            btnText.textContent = '🔄 Scanning...';
+            progressBar.style.display = 'block';
+            results.style.display = 'block';
+            
+            // Reset global state for UI
+            window.detectionState = {
+                location: null,
+                timestamps: [],
+                permissions: {},
+                environmentFlags: [],
+                locationFlags: []
+            };
+            
+            // Run detection using DetectionRunner
+            await updateProgress(10);
+            
+            const session = await window.DetectionRunner.runDetection({
+                includeLocation: true,
+                includeEnvironment: true,
+                includeNetwork: true,
+                silent: false
+            });
+            
+            await updateProgress(90);
+            
+            // Update global state from session for UI compatibility
+            window.detectionState = {
+                location: session.location,
+                timestamps: session.timestamps,
+                permissions: {},
+                environmentFlags: session.environmentFlags,
+                locationFlags: session.locationFlags
+            };
+            
+            // Update checks UI
+            Object.keys(session.checks).forEach(category => {
+                session.checks[category].forEach(check => {
+                    updateCheck(category, check.id, check.status, check.result);
+                });
+            });
+            
+            await updateProgress(100);
+            
+            // Analyze results
+            analyzeResults();
+            
+            // Store session
+            window.lastDetectionSession = session;
+            document.getElementById('exportSessionBtn').style.display = 'block';
+            
+            // Show results
+            setTimeout(() => {
+                btn.classList.remove('scanning');
+                btnText.textContent = '🔍 Locate Me';
+                progressBar.style.display = 'none';
+                progressFill.style.width = '0%';
+            }, 500);
+            
+            // Show pattern analysis card
+            window.showPatternAnalysisCard();
+            
+            // Store session if API is available
+            if (typeof storeSessionFingerprint === 'function') {
+                storeSessionFingerprint();
+            }
+        };
+        
+        // Handle multiple detection button
+        document.getElementById('multiDetectBtn').addEventListener('click', async function() {
+            const btn = this;
+            const btnText = document.getElementById('multiDetectBtnText');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            const results = document.getElementById('results');
+            const multiResults = document.getElementById('multiDetectionResults');
+            
+            // Update UI
+            btn.classList.add('scanning');
+            btnText.textContent = '🔄 Running Multiple Detections...';
+            progressBar.style.display = 'block';
+            results.style.display = 'block';
+            
+            // Run multiple detections in a single session
+            const detectionCount = 3;
+            const delay = 1500; // 1.5 seconds between runs
+            
+            // Update progress during detections
+            let progressInterval = setInterval(() => {
+                const currentProgress = parseInt(progressFill.style.width) || 0;
+                if (currentProgress < 90) {
+                    updateProgress(currentProgress + 10);
+                }
+            }, 500);
+            
+            try {
+                // Run session with multiple detections
+                const session = await window.DetectionRunner.runSessionWithMultipleDetections(
+                    detectionCount, 
+                    delay, 
+                    {
+                        includeLocation: true,
+                        includeEnvironment: true,
+                        includeNetwork: true,
+                        silent: false,
+                        metadata: {
+                            purpose: 'multi-detection-consistency-check',
+                            userAgent: navigator.userAgent
+                        }
+                    }
+                );
+                
+                clearInterval(progressInterval);
+                await updateProgress(100);
+                
+                // Store results
+                window.lastMultiDetectionSession = session;
+                window.multiDetectionResults = session; // For backward compatibility
+                document.getElementById('exportSessionBtn').style.display = 'block';
+                
+                // Store session if API is available
+                if (typeof storeSessionWithDetections === 'function' && session.detections.length > 0) {
+                    const storeResult = await storeSessionWithDetections(session);
+                    
+                    if (storeResult) {
+                        window.lastStoredSessionId = storeResult.sessionId;
+                    }
+                }
+                
+                // Display multi-detection analysis
+                displayMultiDetectionSession(session);
+                multiResults.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Multi-detection error:', error);
+                clearInterval(progressInterval);
+                await updateProgress(100);
+                
+                // Show error in UI
+                const detailsEl = document.getElementById('multiDetectionDetails');
+                detailsEl.innerHTML = `<p style="color: #ef4444;">Error running multiple detections: ${error.message}</p>`;
+                multiResults.style.display = 'block';
+            }
+            
+            // Reset UI
+            setTimeout(() => {
+                btn.classList.remove('scanning');
+                btnText.textContent = '🔄 Run Multiple Detections (3x)';
+                progressBar.style.display = 'none';
+                progressFill.style.width = '0%';
+            }, 500);
+        });
+        
+        // Display multiple detection session results
+        function displayMultiDetectionSession(session) {
+            const detailsEl = document.getElementById('multiDetectionDetails');
+            const statusEl = document.getElementById('consistencyStatus');
+            
+            const { summary, detections } = session;
+            
+            // Set overall status
+            if (summary.consistency.inconsistencies.length > 0) {
+                statusEl.textContent = 'Inconsistent';
+                statusEl.className = 'status-badge status-spoofed';
+            } else if (summary.consistency.scoreVariance > 5) {
+                statusEl.textContent = 'Unstable';
+                statusEl.className = 'status-badge status-suspicious';
+            } else {
+                statusEl.textContent = 'Consistent';
+                statusEl.className = 'status-badge status-authentic';
+            }
+            
+            // Build details HTML
+            let html = '<div class="multi-detection-summary">';
+            
+            // Session info
+            html += '<h4 style="margin-bottom: 15px;">📋 Session Information</h4>';
+            html += `<p><strong>Session ID:</strong> ${session.sessionId}</p>`;
+            html += `<p><strong>Duration:</strong> ${(summary.timespan.durationMs / 1000).toFixed(1)}s</p>`;
+            
+            // Summary section
+            html += '<h4 style="margin-top: 20px; margin-bottom: 15px;">📊 Summary</h4>';
+            html += `<p><strong>Total Detections:</strong> ${summary.detectionCount}</p>`;
+            html += '<p><strong>Average Scores:</strong></p>';
+            html += '<ul style="margin-left: 20px;">';
+            html += `<li>Location: ${summary.averageScores.location}%</li>`;
+            html += `<li>Environment: ${summary.averageScores.environment}%</li>`;
+            html += `<li>Network: ${summary.averageScores.network}%</li>`;
+            html += `<li>Overall: ${summary.averageScores.overall}%</li>`;
+            html += '</ul>';
+            
+            // Consistency section
+            html += '<h4 style="margin-top: 20px; margin-bottom: 15px;">🔍 Consistency Analysis</h4>';
+            html += '<ul style="margin-left: 20px;">';
+            html += `<li>Location Consistency: <span class="${summary.consistency.location ? 'status-authentic' : 'status-spoofed'}">${summary.consistency.location ? 'Consistent' : 'Inconsistent'}</span></li>`;
+            html += `<li>Environment Consistency: <span class="${summary.consistency.environment ? 'status-authentic' : 'status-spoofed'}">${summary.consistency.environment ? 'Consistent' : 'Inconsistent'}</span></li>`;
+            html += `<li>Score Stability: <span class="${summary.consistency.scoreVariance < 5 ? 'status-authentic' : 'status-suspicious'}">Variance: ${summary.consistency.scoreVariance.toFixed(2)}</span></li>`;
+            html += '</ul>';
+            
+            // Inconsistencies
+            if (summary.consistency.inconsistencies.length > 0) {
+                html += '<h4 style="margin-top: 20px; margin-bottom: 15px;">⚠️ Inconsistencies Detected</h4>';
+                html += '<ul style="margin-left: 20px;">';
+                summary.consistency.inconsistencies.forEach(inc => {
+                    html += `<li class="detection-item"><span class="indicator warning"></span>${inc.message}</li>`;
+                });
+                html += '</ul>';
+            }
+            
+            // Individual detection results
+            html += '<h4 style="margin-top: 20px; margin-bottom: 15px;">📋 Individual Detections</h4>';
+            detections.forEach((detection, idx) => {
+                html += `<div style="background: rgba(255,255,255,0.05); padding: 10px; margin: 10px 0; border-radius: 8px;">`;
+                html += `<p><strong>Detection ${detection.detectionIndex + 1}</strong> (${detection.detectionTimestamp})</p>`;
+                html += `<p style="font-size: 0.9em;">Scores: Location ${detection.scores.location}%, Environment ${detection.scores.environment}%, Network ${detection.scores.network}%</p>`;
+                
+                if (detection.location) {
+                    html += `<p style="font-size: 0.9em;">Location: ${detection.location.latitude.toFixed(6)}, ${detection.location.longitude.toFixed(6)} (±${Math.round(detection.location.accuracy)}m)</p>`;
+                    html += `<p style="font-size: 0.9em;">Response Time: ${detection.location.responseTime.toFixed(0)}ms</p>`;
+                }
+                
+                html += `<p style="font-size: 0.9em;">Fingerprint: ${detection.fingerprint}</p>`;
+                html += '</div>';
+            });
+            
+            html += '</div>';
+            
+            detailsEl.innerHTML = html;
+        }
+        
+        // Export sessions
+        document.getElementById('exportSessionBtn').addEventListener('click', function() {
+            const exportData = {
+                timestamp: new Date().toISOString(),
+                singleSession: window.lastDetectionSession,
+                multiDetectionSession: window.lastMultiDetectionSession,
+                // Legacy format for backward compatibility
+                multipleDetections: window.multiDetectionResults
+            };
+            
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `geo-detection-sessions-${Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        // Override startDetection with the new runner version
+        startDetection = startDetectionWithRunner;
     </script>
 </body>
 </html>
